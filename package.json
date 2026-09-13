@@ -13,7 +13,8 @@
     "typecheck": "react-router typegen && tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "build": "react-router build && tsc -p tsconfig.server.json",
     "start": "node --env-file-if-exists=.env dist/server/index.js",
-    "test": "node --import tsx --test server/*.test.ts"
+    "test": "node --import tsx --test server/*.test.ts",
+    "test:integration": "node scripts/test-identity.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
