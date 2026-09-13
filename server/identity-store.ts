@@ -25,7 +25,7 @@ export type ReportAsset = {
   ownerKey?: string;
 };
 export type ReportingContext = { actorKey: string; groupKey: string };
-export type AssetChanges = { name?: string; ownerKey?: string | null };
+export type AssetChanges = { name?: string; ownerKey?: string | null; isPublic?: boolean };
 
 const constraints = [
   'CREATE CONSTRAINT user_key IF NOT EXISTS FOR (n:User) REQUIRE n.key IS UNIQUE',
@@ -44,6 +44,9 @@ function claimProperties(identifier: AssetIdentifier) {
 const assetMatch = `MATCH (a:Asset)-[:IDENTIFIED_BY]->(i:Identifier {
   scheme: $claim.scheme, value: $claim.value, serial: $claim.serial
 })`;
+const collaboration = `EXISTS {
+  MATCH (:User {key: $actorKey})-[:MEMBER_OF]->(:Group)-[:CAN_COLLABORATE]->(a)
+}`;
 const assetProjection = `
   MATCH (a)-[:REPORTED_BY]->(u:User)
   MATCH (g:Group)-[:CAN_COLLABORATE]->(a)
@@ -98,6 +101,45 @@ export class IdentityStore {
   createGroup(name: string) { return this.createEntity('Group', name); }
   createOwner(name: string) { return this.createEntity('Owner', name); }
 
+  async createReportingGroup(name: string, actorKey: string): Promise<Entity> {
+    const group = { key: randomUUID(), name: requiredText(name, 'name') };
+    return this.write(async (tx) => {
+      const result = await tx.run(`MATCH (u:User {key: $actorKey})
+        CREATE (g:Group $group), (u)-[:MEMBER_OF]->(g) RETURN g.key`, { actorKey, group });
+      if (!result.records.length) throw new ReferenceError('User does not exist');
+      return group;
+    });
+  }
+
+  async listGroups(actorKey: string): Promise<Entity[]> {
+    const session = this.driver.session();
+    try {
+      const result = await session.executeRead((tx) => tx.run(`
+        MATCH (:User {key: $actorKey})-[:MEMBER_OF]->(g:Group)
+        RETURN DISTINCT g { .key, .name } AS entity ORDER BY entity.name`, { actorKey }));
+      return result.records.map((row) => row.get('entity') as Entity);
+    } finally { await session.close(); }
+  }
+
+  async addGroupMember(actorKey: string, groupKey: string, userKey: string): Promise<void> {
+    await this.write(async (tx) => {
+      const result = await tx.run(`
+        MATCH (:User {key: $actorKey})-[:MEMBER_OF]->(g:Group {key: $groupKey})
+        MATCH (u:User {key: $userKey})
+        MERGE (u)-[:MEMBER_OF]->(g) RETURN g.key`, { actorKey, groupKey, userKey });
+      if (!result.records.length) throw new ReferenceError('Group access or target User not found');
+    });
+  }
+
+  async leaveGroup(actorKey: string, groupKey: string): Promise<void> {
+    await this.write(async (tx) => {
+      const result = await tx.run(`
+        MATCH (:User {key: $actorKey})-[m:MEMBER_OF]->(g:Group {key: $groupKey})
+        DELETE m RETURN g.key`, { actorKey, groupKey });
+      if (!result.records.length) throw new ReferenceError('Group membership not found');
+    });
+  }
+
   async addMember(userKey: string, groupKey: string): Promise<void> {
     const params = {
       userKey: requiredText(userKey, 'userKey'), groupKey: requiredText(groupKey, 'groupKey'),
@@ -148,34 +190,64 @@ export class IdentityStore {
     }
   }
 
-  async getAsset(value: AssetIdentifier): Promise<Asset | null> {
+  async getAsset(value: AssetIdentifier, actorKey: string | null): Promise<Asset | null> {
     const identifier = canonicalIdentifier(value);
     const session = this.driver.session();
     try {
       const result = await session.executeRead((tx) => tx.run(
-        `${assetMatch} ${assetProjection}`, { claim: claimProperties(identifier) },
+        `${assetMatch} WHERE a.isPublic = true OR ${collaboration} ${assetProjection}`,
+        { claim: claimProperties(identifier), actorKey },
       ));
       return result.records.length ? { ...result.records[0].get('asset'), identifier } as Asset : null;
     } finally { await session.close(); }
   }
 
-  async updateAsset(value: AssetIdentifier, changes: AssetChanges): Promise<Asset> {
+  async findAssets(actorKey: string, text: string): Promise<Asset[]> {
+    const session = this.driver.session();
+    try {
+      const result = await session.executeRead((tx) => tx.run(`
+        MATCH (a:Asset)-[:IDENTIFIED_BY]->(i:Identifier)
+        WHERE (a.isPublic = true OR ${collaboration}) AND toLower(a.name) CONTAINS toLower($text)
+        WITH a, i ORDER BY a.name, i.scheme, i.value, i.serial LIMIT 100
+        WITH a, i AS identity
+        MATCH (a)-[:REPORTED_BY]->(u:User)
+        MATCH (g:Group)-[:CAN_COLLABORATE]->(a)
+        OPTIONAL MATCH (a)-[:OWNED_BY]->(o:Owner)
+        WITH a, identity, u, o, collect(g { .key, .name }) AS groups
+        RETURN a { .name, .isPublic, reportedAt: toString(a.reportedAt),
+          reportedBy: u { .key, .name }, owner: o { .key, .name }, groups: groups } AS asset,
+          identity { .scheme, .value, .serial } AS identifier`, { actorKey, text }));
+      return result.records.map((row) => {
+        const i = row.get('identifier');
+        const identifier: AssetIdentifier = i.scheme === 'sgtin'
+          ? { scheme: 'sgtin', gtin: i.value, serial: i.serial } : { scheme: 'grai', grai: i.value };
+        return { ...row.get('asset'), identifier } as Asset;
+      });
+    } finally { await session.close(); }
+  }
+
+  async updateAsset(value: AssetIdentifier, changes: AssetChanges, actorKey: string): Promise<Asset> {
     const identifier = canonicalIdentifier(value);
-    const input = record(changes, ['name', 'ownerKey']);
+    const input = record(changes, ['name', 'ownerKey', 'isPublic']);
+    if (Object.hasOwn(input, 'isPublic') && typeof input.isPublic !== 'boolean') {
+      throw new ValidationError('isPublic must be a boolean');
+    }
     if (!Object.keys(input).length) throw new ValidationError('At least one change is required');
     const params = {
       claim: claimProperties(identifier),
+      actorKey,
+      isPublic: input.isPublic ?? null,
       name: Object.hasOwn(input, 'name') ? requiredText(input.name, 'name') : null,
       changeOwner: Object.hasOwn(input, 'ownerKey'),
       ownerKey: input.ownerKey === null || !Object.hasOwn(input, 'ownerKey')
         ? null : requiredText(input.ownerKey, 'ownerKey'),
     };
     return this.write(async (tx) => {
-      const result = await tx.run(`${assetMatch}
+      const result = await tx.run(`${assetMatch} WHERE ${collaboration}
         OPTIONAL MATCH (owner:Owner {key: $ownerKey})
         WITH a, owner WHERE $ownerKey IS NULL OR owner IS NOT NULL
         // Lock the Asset before changing its single Owner relationship.
-        SET a.name = coalesce($name, a.name)
+        SET a.name = coalesce($name, a.name), a.isPublic = coalesce($isPublic, a.isPublic)
         WITH a, owner
         OPTIONAL MATCH (a)-[old:OWNED_BY]->(:Owner)
         FOREACH (r IN CASE WHEN $changeOwner THEN [old] ELSE [] END | DELETE r)

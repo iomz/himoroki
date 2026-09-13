@@ -1,5 +1,35 @@
 :root { font-family: system-ui, sans-serif; color: #202622; background: #f6f7f4; }
 body { margin: 0; }
-main { max-width: 48rem; margin: 12vh auto; padding: 0 1.5rem; }
+main { max-width: 56rem; margin: 3rem auto; padding: 0 1.5rem; }
 h1 { font-size: 2.5rem; letter-spacing: -0.04em; }
 p { line-height: 1.6; }
+* { box-sizing: border-box; }
+a { color: #225b45; }
+h2 { font-size: 1.25rem; margin-top: 0; }
+.panel { background: white; border: 1px solid #d9dfd8; border-radius: .6rem; padding: 1.5rem; margin: 1.5rem 0; }
+.auth { max-width: 28rem; }
+label { display: grid; gap: .4rem; margin-bottom: 1rem; }
+input, select, button { font: inherit; padding: .65rem .8rem; border: 1px solid #acb8af; border-radius: .3rem; }
+input, select { min-width: 0; width: 100%; background: white; color: #202622; }
+button { cursor: pointer; color: white; background: #225b45; border-color: #225b45; }
+button:disabled { opacity: .55; cursor: wait; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.secondary { background: transparent; color: #225b45; margin-top: .75rem; }
+.hint { font-size: .875rem; color: #546359; overflow-wrap: anywhere; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.inline, .toolbar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.inline label { flex: 1; margin: 0; }
+.inline button { align-self: end; }
+.toolbar { justify-content: space-between; }
+.checkbox { display: flex; align-items: center; gap: .6rem; }
+.checkbox input { width: auto; }
+details { margin-top: 1rem; border-top: 1px solid #d9dfd8; padding-top: 1rem; }
+summary { cursor: pointer; margin-bottom: 1rem; font-weight: 600; }
+.assets { list-style: none; padding: 0; }
+.assets li { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid #d9dfd8; }
+.assets span { color: #546359; font-size: .875rem; }
+dl { display: grid; grid-template-columns: 11rem 1fr; gap: .8rem; }
+dt { color: #546359; } dd { margin: 0; overflow-wrap: anywhere; }
+[role=alert] { color: #8d2323; padding: 1rem; background: #fff0ef; border-radius: .3rem; }
+:focus-visible { outline: 3px solid #70a98a; outline-offset: 3px; }
+@media (max-width: 560px) { .grid, dl { grid-template-columns: 1fr; } dd { margin-bottom: .7rem; } }

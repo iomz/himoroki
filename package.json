@@ -18,7 +18,10 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@neo4j/cypher-builder": "3.3.0",
+    "better-auth": "1.7.4",
     "hono": "^4.13.7",
+    "neo4j-better-auth": "0.1.1",
     "neo4j-driver": "^6.2.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

@@ -43,7 +43,7 @@ test('Neo4j identity integrity', { skip: !uri || !password }, async (t) => {
     assert.equal(asset.isPublic, false);
     assert.ok(Date.parse(asset.reportedAt) >= start - 1000);
     assert.ok(Date.parse(asset.reportedAt) <= Date.now() + 1000);
-    assert.deepEqual(await otherStore.getAsset(sgtin('001')), asset);
+    assert.deepEqual(await otherStore.getAsset(sgtin('001'), user.key), asset);
     for (const key of ['id', 'key', 'elementId', 'uuid']) assert.equal(Object.hasOwn(asset, key), false);
     const links = await query('MATCH (u:User)-[r]-(a:Asset) RETURN DISTINCT type(r) AS type');
     assert.deepEqual(links.records.map((r) => r.get('type')), ['REPORTED_BY']);
@@ -76,10 +76,10 @@ test('Neo4j identity integrity', { skip: !uri || !password }, async (t) => {
       { scheme: 'sgtin', gtin: '00614141123452', serial: '001' },
     ] }, context), DuplicateIdentityError);
     assert.deepEqual(await counts(), before);
-    assert.equal((await store.getAsset(sgtin('001')))?.name, 'Oscilloscope');
+    assert.equal((await store.getAsset(sgtin('001'), user.key))?.name, 'Oscilloscope');
     const asset = await store.reportAsset({ name: 'Reusable container', identifiers: [grai] }, context);
     assert.equal(asset.owner, null);
-    assert.deepEqual(await store.getAsset(grai), asset);
+    assert.deepEqual(await store.getAsset(grai, user.key), asset);
     await assert.rejects(otherStore.reportAsset({ name: 'Duplicate GRAI', identifiers: [grai] }, context), DuplicateIdentityError);
   });
 
@@ -105,23 +105,23 @@ test('Neo4j identity integrity', { skip: !uri || !password }, async (t) => {
   });
 
   await t.test('metadata and Owner changes preserve provenance and identifier', async () => {
-    const before = (await store.getAsset(sgtin('001')))!;
+    const before = (await store.getAsset(sgtin('001'), user.key))!;
     const newOwner = await store.createOwner('Another organization');
-    const changed = await store.updateAsset(sgtin('001'), { name: 'Updated name', ownerKey: newOwner.key });
+    const changed = await store.updateAsset(sgtin('001'), { name: 'Updated name', ownerKey: newOwner.key }, user.key);
     assert.equal(changed.name, 'Updated name');
     assert.deepEqual(changed.owner, newOwner);
     assert.equal(changed.reportedAt, before.reportedAt);
     assert.deepEqual(changed.reportedBy, before.reportedBy);
     assert.deepEqual(changed.identifier, before.identifier);
     assert.deepEqual(changed.groups, before.groups);
-    assert.equal((await store.updateAsset(sgtin('001'), { ownerKey: null })).owner, null);
+    assert.equal((await store.updateAsset(sgtin('001'), { ownerKey: null }, user.key)).owner, null);
     for (const changes of [
       { reportedAt: '2000-01-01T00:00:00Z' }, { reportedBy: outsider.key },
       { identifier: grai }, { identifiers: [grai] }, { name: '' }, { name: undefined },
-    ]) await assert.rejects(store.updateAsset(sgtin('001'), changes as never), ValidationError);
-    await assert.rejects(store.updateAsset(sgtin('001'), { name: 'Must roll back', ownerKey: 'missing' }), ReferenceError);
-    assert.equal((await store.getAsset(sgtin('001')))?.name, 'Updated name');
-    assert.equal(await store.getAsset(sgtin('unknown')), null);
+    ]) await assert.rejects(store.updateAsset(sgtin('001'), changes as never, user.key), ValidationError);
+    await assert.rejects(store.updateAsset(sgtin('001'), { name: 'Must roll back', ownerKey: 'missing' }, user.key), ReferenceError);
+    assert.equal((await store.getAsset(sgtin('001'), user.key))?.name, 'Updated name');
+    assert.equal(await store.getAsset(sgtin('unknown'), user.key), null);
   });
 
   await t.test('schema initialization fails closed when a constraint name masks the required schema', async () => {
