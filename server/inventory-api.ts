@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { validator } from 'hono/validator';
+import { maxPhotoBytes, type MediaService } from './media.js';
 import type { Auth } from './auth.js';
 import { canonicalIdentifier, record, requiredText, ValidationError } from './identity.js';
 import { DuplicateIdentityError, ReferenceError, type IdentityStore, type AssetChanges, type ReportAsset } from './identity-store.js';
@@ -14,7 +15,7 @@ function actor(user: User | null) {
   return user.key;
 }
 
-export function createInventoryApi(store: IdentityStore, auth: Auth, origin: string) {
+export function createInventoryApi(store: IdentityStore, auth: Auth, origin: string, media?: MediaService) {
   return new Hono<Env>()
     .use('*', async (c, next) => {
       c.header('Cache-Control', 'no-store');
@@ -23,7 +24,7 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       }
       await next();
     })
-    .use('*', bodyLimit({ maxSize: 16384 }))
+    .use('*', bodyLimit({ maxSize: maxPhotoBytes + 16384 }))
     .all('/auth/*', (c) => authPaths.has(new URL(c.req.url).pathname)
       ? auth.handler(c.req.raw) : c.json({ error: 'Not found' }, 404))
     .use('*', async (c, next) => {
@@ -33,7 +34,36 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       c.set('user', session && key ? { key, name: session.user.name } : null);
       await next();
     })
-    .get('/me', (c) => c.json({ user: c.get('user') }))
+    .get('/me', async (c) => c.json({ user: c.get('user'), isAdmin: await store.isAdmin(c.get('user')?.key ?? null) }))
+    .get('/settings', async (c) => c.json({ settings: await store.settings() }))
+    .patch('/settings', async (c) => c.json({ settings: await store.updateSettings(actor(c.get('user')), await c.req.json()) }))
+    .post('/reports', async (c) => {
+      const actorKey = actor(c.get('user'));
+      if (!media) throw new HTTPException(503, { message: 'Media storage unavailable' });
+      const form = await c.req.formData();
+      const input = record(JSON.parse(String(form.get('report'))), ['name', 'identifiers', 'ownerKey', 'groupKey']);
+      const { groupKey, ...report } = input;
+      const file = form.get('photo');
+      if (file !== null && !(file instanceof File)) throw new ValidationError('Expected a photo file');
+      const asset = await media.report(report as ReportAsset, { actorKey, groupKey: requiredText(groupKey, 'groupKey') }, file && file.size ? file : undefined);
+      return c.json({ asset }, 201);
+    })
+    .post('/photo', validator('query', canonicalIdentifier), async (c) => {
+      const actorKey = actor(c.get('user'));
+      if (!media) throw new HTTPException(503, { message: 'Media storage unavailable' });
+      const form = await c.req.formData();
+      const file = form.get('photo');
+      if (!(file instanceof File)) throw new ValidationError('Expected a photo file');
+      return c.json({ asset: await media.add(c.req.valid('query'), actorKey, file) }, 201);
+    })
+    .get('/photos/:key', validator('query', canonicalIdentifier), async (c) => {
+      if (!media) throw new HTTPException(503, { message: 'Media storage unavailable' });
+      const { photo, bytes } = await media.read(c.req.valid('query'), c.req.param('key'), c.get('user')?.key ?? null);
+      c.header('Content-Type', photo.contentType);
+      c.header('X-Content-Type-Options', 'nosniff');
+      c.header('Content-Disposition', 'inline');
+      return c.body(new Uint8Array(bytes).buffer);
+    })
     .get('/groups', async (c) => c.json({ groups: await store.listGroups(actor(c.get('user'))) }))
     .post('/groups', validator('json', (value) => {
       const input = record(value, ['name']);
@@ -78,6 +108,7 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       return c.json({ asset });
     })
     .onError((error, c) => {
+      if (error instanceof SyntaxError) return c.json({ error: 'Invalid JSON' }, 400);
       if (error instanceof ValidationError) return c.json({ error: error.message }, 400);
       if (error instanceof ReferenceError) return c.json({ error: 'Resource or Group access not found' }, 404);
       if (error instanceof DuplicateIdentityError) return c.json({ error: error.message }, 409);

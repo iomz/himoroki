@@ -1,6 +1,8 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { getConnInfo } from '@hono/node-server/conninfo';
+import { storageFromEnv } from './storage.js';
+import { MediaService } from './media.js';
 import neo4j from 'neo4j-driver';
 import { createApp } from './app.js';
 import { createAuth } from './auth.js';
@@ -25,6 +27,13 @@ const appURL = process.env.APP_URL;
 const authSecret = process.env.BETTER_AUTH_SECRET;
 if (!appURL || !authSecret) throw new Error('APP_URL and BETTER_AUTH_SECRET are required');
 const store = await IdentityStore.open(driver);
+const storage = storageFromEnv();
+await storage.check();
+const media = new MediaService(store, storage);
+const cleanup = () => media.cleanup().catch((error) => console.error('Photo cleanup pending', error));
+await cleanup();
+const cleanupTimer = setInterval(cleanup, 60000);
+cleanupTimer.unref();
 const auth = await createAuth(driver, appURL, authSecret);
 app.use('/api/*', async (c, next) => {
   c.req.raw.headers.delete('x-himoroki-client-ip');
@@ -32,7 +41,7 @@ app.use('/api/*', async (c, next) => {
   if (address) c.req.raw.headers.set('x-himoroki-client-ip', address);
   await next();
 });
-app.route('/api', createInventoryApi(store, auth, new URL(appURL).origin));
+app.route('/api', createInventoryApi(store, auth, new URL(appURL).origin, media));
 
 // Unknown API paths must never fall through to the SPA.
 app.all('/api', (c) => c.json({ error: 'Not found' }, 404));
@@ -44,6 +53,7 @@ app.get('*', serveStatic({ path: './build/client/index.html' }));
 const server = serve({ fetch: app.fetch, port, hostname: '0.0.0.0' });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
+    clearInterval(cleanupTimer);
     server.close(async () => { await driver.close(); });
   });
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { validateSettings, type Settings } from './settings.js';
 import type { Driver, ManagedTransaction } from 'neo4j-driver';
 import {
   canonicalClaims, canonicalIdentifier, record, requiredText, ValidationError,
@@ -18,7 +19,9 @@ export type Asset = Readonly<{
   owner: Entity | null;
   groups: readonly Entity[];
   isPublic: boolean;
+  photos: readonly Photo[];
 }>;
+export type Photo = { key: string; contentType: string; size: number };
 export type ReportAsset = {
   name: string;
   identifiers: readonly IdentifierClaim[];
@@ -28,6 +31,8 @@ export type ReportingContext = { actorKey: string; groupKey: string };
 export type AssetChanges = { name?: string; ownerKey?: string | null; isPublic?: boolean };
 
 const constraints = [
+  'CREATE CONSTRAINT settings_key IF NOT EXISTS FOR (n:Settings) REQUIRE n.key IS UNIQUE',
+  'CREATE CONSTRAINT media_key IF NOT EXISTS FOR (n:Media) REQUIRE n.key IS UNIQUE',
   'CREATE CONSTRAINT user_key IF NOT EXISTS FOR (n:User) REQUIRE n.key IS UNIQUE',
   'CREATE CONSTRAINT group_key IF NOT EXISTS FOR (n:Group) REQUIRE n.key IS UNIQUE',
   'CREATE CONSTRAINT owner_key IF NOT EXISTS FOR (n:Owner) REQUIRE n.key IS UNIQUE',
@@ -54,7 +59,7 @@ const assetProjection = `
   WITH a, u, o, collect(g { .key, .name }) AS groups
   RETURN a { .name, .isPublic, reportedAt: toString(a.reportedAt),
     reportedBy: u { .key, .name }, owner: o { .key, .name },
-    groups: groups } AS asset`;
+    groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] } AS asset`;
 
 /** Internal persistence API. Callers must supply a trusted actor context.
  * No HTTP routes or authentication are provided by this layer.
@@ -68,9 +73,10 @@ export class IdentityStore {
     try {
       // Fail closed if constraints cannot be installed, including on dirty data.
       for (const statement of constraints) await session.run(statement);
+      await session.run("MERGE (s:Settings {key: 'instance'}) ON CREATE SET s.requirePhoto = false, s.displayTimezone = 'UTC', s.revision = 0");
       const result = await session.run('SHOW CONSTRAINTS YIELD type, labelsOrTypes, properties RETURN *');
       for (const [label, properties] of [
-        ['User', ['key']], ['Group', ['key']], ['Owner', ['key']],
+        ['Settings', ['key']], ['Media', ['key']], ['User', ['key']], ['Group', ['key']], ['Owner', ['key']],
         ['Identifier', ['scheme', 'value', 'serial']],
       ] as const) {
         if (!result.records.some((row) => row.get('type') === 'UNIQUENESS'
@@ -151,7 +157,7 @@ export class IdentityStore {
     });
   }
 
-  async reportAsset(value: ReportAsset, context: ReportingContext): Promise<Asset> {
+  async reportAsset(value: ReportAsset, context: ReportingContext, photoKey: string | null = null): Promise<Asset> {
     const input = record(value, ['name', 'identifiers', 'ownerKey']);
     const actor = record(context, ['actorKey', 'groupKey']);
     const identifier = canonicalClaims(input.identifiers);
@@ -161,9 +167,13 @@ export class IdentityStore {
       groupKey: requiredText(actor.groupKey, 'groupKey'),
       ownerKey: input.ownerKey === undefined ? null : requiredText(input.ownerKey, 'ownerKey'),
       claim: claimProperties(identifier),
+      photoKey,
     };
     try {
       return await this.write(async (tx) => {
+        const policy = await tx.run("MATCH (s:Settings {key: 'instance'}) SET s.revision = s.revision + 1 RETURN s.requirePhoto AS required");
+        if (!photoKey && policy.records[0].get('required')) throw new ValidationError('A photo is required when reporting an Asset');
+        if (photoKey) await this.consumePhoto(tx, photoKey);
         const result = await tx.run(`
           MATCH (u:User {key: $actorKey})-[:MEMBER_OF]->(g:Group {key: $groupKey})
           OPTIONAL MATCH (o:Owner {key: $ownerKey})
@@ -173,6 +183,9 @@ export class IdentityStore {
           CREATE (a)-[:IDENTIFIED_BY]->(i), (a)-[:REPORTED_BY]->(u), (g)-[:CAN_COLLABORATE]->(a)
           FOREACH (owner IN CASE WHEN o IS NULL THEN [] ELSE [o] END |
             CREATE (a)-[:OWNED_BY]->(owner))
+          WITH a
+          OPTIONAL MATCH (m:Media {key: $photoKey})
+          FOREACH (photo IN CASE WHEN m IS NULL THEN [] ELSE [m] END | CREATE (a)-[:HAS_PHOTO]->(photo))
           WITH a ${assetProjection}`, params);
         if (!result.records.length) {
           throw new ReferenceError('Reporter must belong to the selected Group and any Owner must exist');
@@ -215,7 +228,7 @@ export class IdentityStore {
         OPTIONAL MATCH (a)-[:OWNED_BY]->(o:Owner)
         WITH a, identity, u, o, collect(g { .key, .name }) AS groups
         RETURN a { .name, .isPublic, reportedAt: toString(a.reportedAt),
-          reportedBy: u { .key, .name }, owner: o { .key, .name }, groups: groups } AS asset,
+          reportedBy: u { .key, .name }, owner: o { .key, .name }, groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] } AS asset,
           identity { .scheme, .value, .serial } AS identifier`, { actorKey, text }));
       return result.records.map((row) => {
         const i = row.get('identifier');
@@ -224,6 +237,78 @@ export class IdentityStore {
         return { ...row.get('asset'), identifier } as Asset;
       });
     } finally { await session.close(); }
+  }
+
+  async settings(): Promise<Settings> {
+    const result = await this.write((tx) => tx.run("MATCH (s:Settings {key: 'instance'}) RETURN s { .requirePhoto, .displayTimezone } AS settings"));
+    return result.records[0].get('settings');
+  }
+
+  async isAdmin(actorKey: string | null): Promise<boolean> {
+    const result = await this.write((tx) => tx.run('MATCH (u:User {key: $actorKey}) RETURN u.isAdmin = true AS admin', { actorKey }));
+    return result.records[0]?.get('admin') === true;
+  }
+
+  async updateSettings(actorKey: string, value: unknown): Promise<Settings> {
+    const settings = validateSettings(value);
+    return this.write(async (tx) => {
+      const result = await tx.run(`MATCH (:User {key: $actorKey, isAdmin: true}), (s:Settings {key: 'instance'})
+        SET s.revision = s.revision + 1, s.requirePhoto = $settings.requirePhoto, s.displayTimezone = $settings.displayTimezone
+        RETURN s.key`, { actorKey, settings });
+      if (!result.records.length) throw new ReferenceError('Administrator access required');
+      return settings;
+    });
+  }
+
+  async assertCanEdit(identifier: AssetIdentifier, actorKey: string) {
+    const result = await this.write((tx) => tx.run(`${assetMatch} WHERE ${collaboration} RETURN a.name`, { claim: claimProperties(canonicalIdentifier(identifier)), actorKey }));
+    if (!result.records.length) throw new ReferenceError('Asset access not found');
+  }
+
+  async reservePhoto(contentType: string, size: number): Promise<string> {
+    const key = randomUUID();
+    await this.write((tx) => tx.run(`CREATE (:Media {key: $key, contentType: $contentType, size: $size,
+      state: 'pending', expiresAt: datetime() + duration('PT10M')})`, { key, contentType, size }));
+    return key;
+  }
+
+  private async consumePhoto(tx: ManagedTransaction, key: string) {
+    // The write acquires a node lock before checking state and the upload lease.
+    const result = await tx.run(`MATCH (m:Media {key: $key}) SET m.lock = true
+      WITH m WHERE m.state = 'pending' AND m.expiresAt > datetime()
+      SET m.state = 'attached' REMOVE m.expiresAt RETURN m.key`, { key });
+    if (!result.records.length) throw new ValidationError('Photo upload expired or unavailable');
+  }
+
+  async attachPhoto(identifier: AssetIdentifier, actorKey: string, photoKey: string): Promise<Asset> {
+    return this.write(async (tx) => {
+      await this.consumePhoto(tx, photoKey);
+      const result = await tx.run(`${assetMatch} WHERE ${collaboration}
+        MATCH (m:Media {key: $photoKey}) CREATE (a)-[:HAS_PHOTO]->(m)
+        WITH a ${assetProjection}`, { claim: claimProperties(canonicalIdentifier(identifier)), actorKey, photoKey });
+      if (!result.records.length) throw new ReferenceError('Asset access not found');
+      return { ...result.records[0].get('asset'), identifier };
+    });
+  }
+
+  async getPhoto(identifier: AssetIdentifier, key: string, actorKey: string | null): Promise<Photo> {
+    const asset = await this.getAsset(identifier, actorKey);
+    const photo = asset?.photos.find((p) => p.key === key);
+    if (!photo) throw new ReferenceError('Photo not found');
+    return photo;
+  }
+
+  async claimPhotoCleanup(key?: string): Promise<string[]> {
+    const result = await this.write((tx) => tx.run(`MATCH (m:Media)
+      WHERE ($key IS NULL AND (m.state = 'deleting' OR (m.state = 'pending' AND m.expiresAt <= datetime()))) OR m.key = $key
+      SET m.lock = true
+      WITH m WHERE m.state IN ['pending', 'deleting']
+      SET m.state = 'deleting' RETURN m.key AS key`, { key: key ?? null }));
+    return result.records.map((r) => r.get('key'));
+  }
+
+  async finishPhotoCleanup(key: string) {
+    await this.write((tx) => tx.run("MATCH (m:Media {key: $key, state: 'deleting'}) WHERE m.expiresAt <= datetime() DELETE m", { key }));
   }
 
   async updateAsset(value: AssetIdentifier, changes: AssetChanges, actorKey: string): Promise<Asset> {

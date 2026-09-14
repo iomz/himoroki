@@ -5,13 +5,14 @@ import type { AssetIdentifier } from '../../server/identity.js';
 import type { Route } from './+types/home';
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const { user } = await unwrap(await api.me.$get());
+  const { user, isAdmin } = await unwrap(await api.me.$get());
+  const { settings } = await unwrap(await api.settings.$get());
   const q = new URL(request.url).searchParams.get('q') ?? '';
-  if (!user) return { user, q, groups: [], assets: [] };
+  if (!user) return { user, isAdmin, settings, q, groups: [], assets: [] };
   const [{ groups }, { assets }] = await Promise.all([
     api.groups.$get().then(unwrap), api.assets.$get({ query: { q } }).then(unwrap),
   ]);
-  return { user, q, groups, assets };
+  return { user, isAdmin, settings, q, groups, assets };
 }
 
 export async function clientAction({ request }: Route.ClientActionArgs) {
@@ -31,6 +32,9 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
         if (result.error) throw new Error(result.error.message ?? 'Sign-out failed');
         break;
       }
+      case 'settings':
+        await unwrap(await api.settings.$patch({ json: { requirePhoto: data.get('requirePhoto') === 'on', displayTimezone: text('displayTimezone') } }));
+        break;
       case 'group':
         await unwrap(await api.groups.$post({ json: { name: text('name') } }));
         break;
@@ -44,9 +48,11 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
         const identifier: AssetIdentifier = text('scheme') === 'sgtin'
           ? { scheme: 'sgtin', gtin: text('gtin'), serial: text('serial') }
           : { scheme: 'grai', grai: text('grai') };
-        const { asset } = await unwrap(await api.assets.$post({ json: {
-          name: text('name'), identifiers: [identifier], groupKey: text('groupKey'),
-        } }));
+        const form = new FormData();
+        form.set('report', JSON.stringify({ name: text('name'), identifiers: [identifier], groupKey: text('groupKey') }));
+        const photo = data.get('photo');
+        if (photo instanceof File && photo.size) form.set('photo', photo);
+        const { asset } = await unwrap(await fetch('/api/reports', { method: 'POST', body: form }));
         return redirect(assetPath(asset.identifier));
       }
       default: throw new Error('Unknown action');
@@ -57,7 +63,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   }
 }
 
-export default function Home({ loaderData: { user, groups, assets, q }, actionData }: Route.ComponentProps) {
+export default function Home({ loaderData: { user, isAdmin, settings, groups, assets, q }, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== 'idle';
   const [signup, setSignup] = useState(false);
   const [scheme, setScheme] = useState('sgtin');
@@ -82,6 +88,15 @@ export default function Home({ loaderData: { user, groups, assets, q }, actionDa
       <div className="toolbar"><p>Signed in as <strong>{user.name}</strong></p>
         <Form method="post"><button name="intent" value="signout" disabled={busy}>Sign out</button></Form>
       </div>
+      {isAdmin && <section className="panel"><h2>Instance settings</h2>
+        <Form method="post"><fieldset disabled={busy}>
+          <input type="hidden" name="intent" value="settings" />
+          <label className="checkbox"><input type="checkbox" name="requirePhoto" defaultChecked={settings.requirePhoto} />Require photo when reporting an Asset</label>
+          <label>Display timezone<input name="displayTimezone" defaultValue={settings.displayTimezone} required list="timezones" /></label>
+          <datalist id="timezones">{['UTC', ...Intl.supportedValuesOf('timeZone')].map((zone) => <option key={zone} value={zone} />)}</datalist>
+          <button>Save settings</button>
+        </fieldset></Form>
+      </section>}
       <section className="panel">
         <h2>Groups</h2>
         <p className="hint">Your member key: <code>{user.key}</code>. Share it with a Group member to be added.</p>
@@ -102,7 +117,7 @@ export default function Home({ loaderData: { user, groups, assets, q }, actionDa
       </section>
       {groups.length > 0 && <section className="panel">
         <h2>Report Asset</h2>
-        <Form method="post"><fieldset disabled={busy}>
+        <Form method="post" encType="multipart/form-data"><fieldset disabled={busy}>
           <input type="hidden" name="intent" value="report" />
           <label>Reporting Group<select name="groupKey" required defaultValue={groups.length === 1 ? groups[0].key : ''}>
             <option value="" disabled>Choose a Group</option>
@@ -118,6 +133,8 @@ export default function Home({ loaderData: { user, groups, assets, q }, actionDa
           </div> : <label>GRAI<input name="grai" required maxLength={30} />
             <span className="hint">AI 8003 value, including leading zero and individual serial.</span></label>}
           <p className="hint">Use an existing identifier. New Assets are private to the selected Group.</p>
+          <label>Photo{settings.requirePhoto ? " (required)" : " (optional)"}<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required={settings.requirePhoto} /></label>
+          <p className="hint">JPEG, PNG, or WebP, up to 10 MiB.</p>
           <button>Report Asset</button>
         </fieldset></Form>
       </section>}

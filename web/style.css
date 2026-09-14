@@ -33,3 +33,6 @@ dt { color: #546359; } dd { margin: 0; overflow-wrap: anywhere; }
 [role=alert] { color: #8d2323; padding: 1rem; background: #fff0ef; border-radius: .3rem; }
 :focus-visible { outline: 3px solid #70a98a; outline-offset: 3px; }
 @media (max-width: 560px) { .grid, dl { grid-template-columns: 1fr; } dd { margin-bottom: .7rem; } }
+
+.photos { display: flex; flex-wrap: wrap; gap: 1rem; }
+.photos img { max-width: 100%; width: 20rem; height: 15rem; object-fit: contain; }

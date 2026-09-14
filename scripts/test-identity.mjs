@@ -2,6 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import neo4j from 'neo4j-driver';
+import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { readdirSync } from 'node:fs';
 
 const exec = promisify(execFile);
@@ -11,6 +12,8 @@ for (const testFile of readdirSync('server').filter((file) => file.endsWith('.in
   const image = process.env.NEO4J_TEST_IMAGE ?? 'neo4j:5-community';
   let started = false;
   let driver;
+  let objectStarted = false;
+  let storageEnv = {};
   try {
     console.log(`Starting disposable Neo4j (${image})`);
     await exec('docker', ['run', '--rm', '-d', '--name', name,
@@ -34,10 +37,29 @@ for (const testFile of readdirSync('server').filter((file) => file.endsWith('.in
     }
     await driver.close();
     driver = undefined;
+    if (testFile === 'media.integration.test.ts') {
+      await exec('docker', ['run', '--rm', '-d', '--name', name + '-s3', '-p', '127.0.0.1::8080',
+        '-e', 'ADMIN_PASSWORD=' + password, '-e', 'JWT=' + randomUUID() + randomUUID(),
+        '-e', 'DEFAULT_ACCESS_KEY=' + name, '-e', 'DEFAULT_SECRET_KEY=' + password,
+        '-e', 'DEFAULT_BUCKETS=himoroki-photos', '-e', 'ALLOW_ACCOUNT_CREATION=false',
+        'ghcr.io/achtungsoftware/alarik:1.0.0-beta-16']);
+      objectStarted = true;
+      const { stdout: address } = await exec('docker', ['port', name + '-s3', '8080']);
+      storageEnv = { S3_ENDPOINT: 'http://' + address.trim(), S3_BUCKET: 'himoroki-photos', S3_ACCESS_KEY: name, S3_SECRET_KEY: password, S3_REGION: 'us-east-1' };
+      const s3 = new S3Client({ endpoint: storageEnv.S3_ENDPOINT, region: 'us-east-1', forcePathStyle: true,
+        credentials: { accessKeyId: name, secretAccessKey: password } });
+      const storageDeadline = Date.now() + 90000;
+      try {
+        for (;;) {
+          try { await s3.send(new HeadBucketCommand({ Bucket: storageEnv.S3_BUCKET }), { abortSignal: AbortSignal.timeout(2000) }); break; }
+          catch (error) { if (Date.now() >= storageDeadline) throw error; await new Promise((r) => setTimeout(r, 1000)); }
+        }
+      } finally { s3.destroy(); }
+    }
     const code = await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, ['--import', 'tsx', '--test', `server/${testFile}`], {
         stdio: 'inherit',
-        env: { ...process.env, HIMOROKI_TEST_NEO4J_URI: uri, HIMOROKI_TEST_NEO4J_PASSWORD: password },
+        env: { ...process.env, ...storageEnv, HIMOROKI_TEST_NEO4J_URI: uri, HIMOROKI_TEST_NEO4J_PASSWORD: password },
       });
       child.on('error', reject);
       child.on('exit', (code) => resolve(code ?? 1));
@@ -45,6 +67,7 @@ for (const testFile of readdirSync('server').filter((file) => file.endsWith('.in
     if (code) process.exitCode = code;
   } finally {
     await driver?.close();
+    if (objectStarted) await exec('docker', ['stop', name + '-s3']);
     if (started) {
       await exec('docker', ['stop', name]);
       console.log('Disposable Neo4j stopped; no user database was used.');

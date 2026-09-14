@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { displayInstant, validateSettings } from './settings.js';
+import { maxPhotoBytes, photoBytes } from './media.js';
+
+test('display timezone changes presentation without changing the absolute instant', () => {
+  const instant = '2026-01-01T23:30:00.000Z';
+  assert.match(displayInstant(instant, 'UTC'), /1 Jan 2026.*23:30/);
+  assert.match(displayInstant(instant, 'Asia/Tokyo'), /2 Jan 2026.*08:30/);
+  assert.match(displayInstant('2026-07-01T12:00:00Z', 'America/New_York'), /08:00/);
+  assert.equal(instant, '2026-01-01T23:30:00.000Z');
+  assert.throws(() => validateSettings({ requirePhoto: true, displayTimezone: 'not-a-zone' }));
+  assert.throws(() => validateSettings({ requirePhoto: 'true', displayTimezone: 'UTC' }));
+  assert.throws(() => validateSettings({ requirePhoto: false, displayTimezone: 'UTC', requiredFields: [] }));
+});
+
+test('photo validation rejects empty, oversized, active content and mismatched MIME', async () => {
+  await assert.rejects(photoBytes(new File([], 'empty.png', { type: 'image/png' })));
+  await assert.rejects(photoBytes(new File([new Uint8Array(maxPhotoBytes + 1)], 'big.png', { type: 'image/png' })));
+  await assert.rejects(photoBytes(new File(['<svg/>'], 'script.svg', { type: 'image/svg+xml' })));
+  await assert.rejects(photoBytes(new File(['fake'], 'fake.png', { type: 'image/png' })));
+});

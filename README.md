@@ -5,23 +5,37 @@ Himoroki is a modern, deployable inventory system for giving physical things ide
 ## Development
 
 Hono serves the API, React Router v7 Framework Mode provides the UI, and Neo4j stores domain and authentication data.
-The first flow supports local sign-up/sign-in/sign-out, Group membership, and reporting, viewing, editing, and finding Assets with existing identifiers.
+The first flow supports local sign-up/sign-in/sign-out, Group membership, and reporting, photographing, viewing, editing, and finding Assets with existing identifiers.
 
 Use Node 24 and pnpm 10.32.0.
-Copy `.env.example` to `.env` and set `NEO4J_PASSWORD` and a random `BETTER_AUTH_SECRET` of at least 32 characters.
-Generate a secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
-Set `APP_URL` to the exact browser-facing origin: `http://127.0.0.1:5173` for development, or `http://127.0.0.1:3000` for the built application.
-Then run:
+For a fresh full local deployment, generate credentials and start the app, Neo4j, and Alarik:
 
 ```sh
+pnpm setup:env
+docker compose up -d --build --wait
+```
+
+Open `http://127.0.0.1:3000` after startup.
+The helper uses only Node built-ins and can also run as `node scripts/setup-env.mjs` before installing dependencies.
+It creates `.env` in the current directory with independent random credentials and owner-only permissions on POSIX systems, never prints secrets, and refuses to overwrite an existing file.
+It does not start services or rotate credentials in existing storage volumes.
+Keep an existing deployment's `.env`; generating new credentials does not update Neo4j or Alarik's stored credentials.
+For custom configuration, use `.env.example` as a reference.
+
+For local Node/Vite development with containerized dependencies, use this alternative on a fresh checkout:
+
+```sh
+pnpm setup:env --dev
 pnpm install
-docker compose up -d --wait neo4j
+docker compose up -d --wait neo4j alarik
 pnpm dev
 ```
 
+Development mode sets `APP_URL=http://127.0.0.1:5173`; the default sets `http://127.0.0.1:3000`.
+When switching an existing configuration between modes, edit `APP_URL` to match the browser origin and retain its credentials.
 Open the configured `APP_URL` after Vite and Hono start.
 The UI calls Hono through Vite's `/api` proxy; Hono connects to Neo4j.
-Startup requires Neo4j and installs uniqueness constraints before listening.
+Startup requires Neo4j and an accessible private S3 bucket; it installs uniqueness constraints before listening.
 `GET /api/health` checks process liveness; `GET /api/ready` returns 503 if Neo4j becomes unreachable.
 
 ```sh
@@ -34,7 +48,11 @@ pnpm start
 The built application serves UI and API on port 3000 by default.
 For the containerized application, run `docker compose up --build` after configuring `.env`.
 Compose binds published ports to localhost and persists Neo4j data in a named volume.
-S3-compatible storage will be wired when Asset photos are implemented; Alarik is the preferred initial backend.
+[Alarik](https://github.com/achtungsoftware/alarik) is the default development object store, pinned to `1.0.0-beta-16`.
+Compose creates a private `himoroki-photos` bucket and keeps bytes in its own named volume.
+Alarik credentials and default bucket are seeded on first startup; changing environment values does not rotate existing stored credentials.
+To use another S3-compatible backend, configure `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` and provision a private bucket before starting Himoroki.
+The application needs HeadBucket, PutObject, GetObject, and DeleteObject access; it does not depend on Alarik administration APIs.
 
 ## Identity integrity
 
@@ -65,7 +83,6 @@ Its [listed community Neo4j adapter](https://better-auth.com/docs/adapters/commu
 Authentication uses the same `User` nodes as domain provenance, with a server-assigned domain key; account and session records use separate labels.
 This avoids a second application database and a custom authentication adapter.
 The adapter and Better Auth versions are pinned; upgrades must pass the real Neo4j integration tests.
-Existing fixture Users are not automatically converted into login accounts or matched by name.
 
 Create an account, create a Group or ask an existing member to add your member key, then select a reporting Group.
 Any current Group member can add an existing User; Users can leave their own Groups.
@@ -78,17 +95,50 @@ New Assets are private, and there are no direct User-to-Asset ACLs.
 Unsafe API requests require an Origin matching `APP_URL`.
 Better Auth rate limiting uses the TCP peer address set by the Node server; forwarded client IP headers are not trusted, so clients behind one reverse proxy share its rate-limit bucket.
 Authentication routes are limited to sign-up, sign-in, sign-out, and session lookup.
-Media, admin settings, external identity providers, and identifier issuance remain deferred.
+External identity providers and identifier issuance remain deferred.
+
+## Photos and administration
+
+Photos may accompany reporting or be uploaded later from the Asset page.
+Supported uploads are JPEG, PNG, and WebP, up to 10 MiB each.
+Bytes remain in the private bucket; Neo4j stores photo metadata and Asset relationships.
+Photo retrieval always passes through the API and checks current Asset access, including public visibility.
+Responses are not cached, so making an Asset private blocks subsequent anonymous photo requests.
+Previously downloaded copies cannot be recalled.
+
+Administration is explicitly granted by an operator after an account signs up:
+
+```sh
+pnpm admin:grant person@example.com
+```
+
+For the containerized application, use `docker compose exec app node dist/server/grant-admin.js person@example.com`.
+Reload the inventory page to see Instance settings.
+Administration permits changing only the photo-on-report policy and the instance display timezone; it grants no Asset access.
+The defaults are optional photos and UTC display.
+The photo requirement applies to new reports, including direct API requests, and requires a photo in the same reporting submission.
+Existing Assets remain editable without a photo when the policy changes.
+All stored timestamps remain absolute instants; the configured timezone only affects presentation.
+
+Uploads reserve a short-lived metadata record before storing bytes.
+The Asset and photo relationship commit together only after storage succeeds.
+Failure cleanup removes bytes while retaining a retry record through the ten-minute upload lease, covering delayed storage responses.
+Expired or failed uploads are retried on startup and every minute; attached photos are excluded.
+If storage is unavailable, cleanup waits for recovery and the pending photo is never exposed as an Asset photo.
+
+To evaluate an empty deployment, sign up, create a Group or join through an existing member, report an Asset with an existing identifier, upload/view a photo, edit its name, switch public/private visibility, and find it again by name.
+Enable the photo requirement and select a display timezone from Instance settings to exercise deployment policy.
 
 ## Tests
 
 ```sh
 pnpm test
+pnpm test:setup
 pnpm test:integration
 ```
 
-The integration runner creates a disposable Neo4j container per suite with a random password and localhost port, then stops it after testing.
-Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, and immutable provenance after membership removal.
+The integration runner creates a disposable Neo4j container per suite and an Alarik container for media tests with a random password and localhost port, then stops it after testing.
+Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, immutable provenance after membership removal, signed S3 operations, photo authorization, policy enforcement, timezone presentation, and upload-failure cleanup.
 It never uses the application `.env` or an existing database.
 `NEO4J_TEST_IMAGE` may select a locally cached Neo4j 5 image; the default matches Compose's `neo4j:5-community`.
 

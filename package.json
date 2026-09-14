@@ -14,9 +14,13 @@
     "build": "react-router build && tsc -p tsconfig.server.json",
     "start": "node --env-file-if-exists=.env dist/server/index.js",
     "test": "node --import tsx --test server/*.test.ts",
-    "test:integration": "node scripts/test-identity.mjs"
+    "test:integration": "node scripts/test-identity.mjs",
+    "admin:grant": "node --import tsx --env-file-if-exists=.env server/grant-admin.ts",
+    "setup:env": "node scripts/setup-env.mjs",
+    "test:setup": "node --test scripts/setup-env.test.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1131.0",
     "@hono/node-server": "^2.1.1",
     "@neo4j/cypher-builder": "3.3.0",
     "better-auth": "1.7.4",

@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+import { Hono } from 'hono';
+import neo4j from 'neo4j-driver';
+import { IdentityStore } from './identity-store.js';
+import { MediaService } from './media.js';
+import { storageFromEnv, type ObjectStorage } from './storage.js';
+import { createAuth } from './auth.js';
+import { createInventoryApi } from './inventory-api.js';
+
+const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
+const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZxoAAAAASUVORK5CYII=', 'base64');
+const photo = () => new File([png], 'photo.png', { type: 'image/png' });
+test('S3 media, policy and administration', { skip: !uri || !password || !process.env.S3_ENDPOINT }, async (t) => {
+  const driver = neo4j.driver(uri!, neo4j.auth.basic('neo4j', password!));
+  t.after(() => driver.close());
+  const store = await IdentityStore.open(driver);
+  const storage = storageFromEnv();
+  await storage.check();
+  const media = new MediaService(store, storage);
+  const origin = 'http://localhost:3000';
+  const auth = await createAuth(driver, origin, randomUUID() + randomUUID());
+  const app = new Hono().route('/api', createInventoryApi(store, auth, origin, media));
+  const signup = await app.request(origin + '/api/auth/sign-up/email', { method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Reporter', email: 'reporter@example.com', password: randomUUID() }) });
+  assert.equal(signup.status, 200);
+  const cookie = signup.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const user = (await (await app.request(origin + '/api/me', { headers: { Cookie: cookie } })).json()).user;
+  const member = await store.createUser('Member');
+  const stranger = await store.createUser('Stranger');
+  const group = await store.createReportingGroup('Team', user.key);
+  await store.addGroupMember(user.key, group.key, member.key);
+  const context = { actorKey: user.key, groupKey: group.key };
+  const id = { scheme: 'sgtin' as const, gtin: '00614141123452', serial: 'media' };
+  const input = { name: 'Camera', identifiers: [id] };
+  async function query(cypher: string, params = {}) {
+    const session = driver.session();
+    try { return await session.run(cypher, params); } finally { await session.close(); }
+  }
+  const request = (path: string, method = 'GET', body?: BodyInit, authenticated = true) => app.request(origin + '/api' + path, {
+    method, headers: { Origin: origin, ...(authenticated ? { Cookie: cookie } : {}), ...(typeof body === 'string' ? { 'Content-Type': 'application/json' } : {}) }, body,
+  });
+
+  await t.test('only explicitly granted administrator can change two instance settings', async () => {
+    const change = JSON.stringify({ requirePhoto: true, displayTimezone: 'Asia/Tokyo' });
+    assert.equal((await request('/settings', 'PATCH', change)).status, 404);
+    assert.equal((await request('/settings', 'PATCH', change, false)).status, 401);
+    await query('MATCH (u:User {key: $key}) SET u.isAdmin = true', { key: user.key });
+    assert.equal((await request('/settings', 'PATCH', change)).status, 200);
+    assert.deepEqual(await store.settings(), { requirePhoto: true, displayTimezone: 'Asia/Tokyo' });
+    assert.equal((await request('/settings', 'PATCH', JSON.stringify({ requirePhoto: false, displayTimezone: 'unknown' }))).status, 400);
+  });
+
+  await t.test('required photo enforced on JSON and multipart reports; successful bytes and metadata commit together', async () => {
+    assert.equal((await request('/assets', 'POST', JSON.stringify({ ...input, groupKey: group.key }))).status, 400);
+    await assert.rejects(store.reportAsset(input, context), /photo is required/);
+    const empty = new FormData(); empty.set('report', JSON.stringify({ ...input, groupKey: group.key }));
+    assert.equal((await request('/reports', 'POST', empty)).status, 400);
+    assert.equal(await store.getAsset(id, user.key), null);
+    const form = new FormData(); form.set('report', JSON.stringify({ ...input, groupKey: group.key })); form.set('photo', photo());
+    const response = await request('/reports', 'POST', form);
+    assert.equal(response.status, 201, await response.clone().text());
+    const asset = (await response.json()).asset;
+    assert.equal(asset.photos.length, 1);
+    assert.deepEqual(Buffer.from(await storage.get(asset.photos[0].key)), png);
+    assert.match(asset.reportedAt, /Z$/);
+  });
+
+  await t.test('photo access follows Asset visibility and membership, including revocation', async () => {
+    const asset = (await store.getAsset(id, user.key))!;
+    const key = asset.photos[0].key;
+    const path = '/photos/' + key + '?' + new URLSearchParams(id);
+    assert.equal((await request(path)).status, 200);
+    assert.equal((await request(path, 'GET', undefined, false)).status, 404);
+    await assert.rejects(media.read(id, key, stranger.key));
+    await assert.rejects(media.add(id, stranger.key, photo()));
+    const added = await media.add(id, member.key, photo());
+    assert.equal(added.photos.length, 2);
+    await store.updateAsset(id, { isPublic: true }, user.key);
+    const publicRead = await request(path, 'GET', undefined, false);
+    assert.equal(publicRead.status, 200);
+    assert.equal(publicRead.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(Buffer.from(await publicRead.arrayBuffer()), png);
+    await assert.rejects(media.add(id, stranger.key, photo()));
+    const form = new FormData(); form.set('photo', photo());
+    assert.equal((await request('/photo?' + new URLSearchParams(id), 'POST', form, false)).status, 401);
+    await store.updateAsset(id, { isPublic: false }, user.key);
+    assert.equal((await request(path, 'GET', undefined, false)).status, 404);
+    await store.leaveGroup(user.key, group.key);
+    assert.equal(await store.isAdmin(user.key), true);
+    assert.equal((await request(path)).status, 404); // administrator is not an Asset ACL
+    await assert.rejects(media.add(id, user.key, photo()));
+    assert.deepEqual((await store.getAsset(id, member.key))!.reportedBy, asset.reportedBy);
+    await store.addGroupMember(member.key, group.key, user.key);
+  });
+
+  await t.test('optional policy accepts photo-free reports and does not affect existing Assets', async () => {
+    await store.updateSettings(user.key, { requirePhoto: false, displayTimezone: 'UTC' });
+    const asset = await media.report({ name: 'Optional', identifiers: [{ ...id, serial: 'optional' }] }, context);
+    assert.deepEqual(asset.photos, []);
+    await store.updateSettings(user.key, { requirePhoto: true, displayTimezone: 'UTC' });
+    assert.ok(await store.updateAsset(asset.identifier, { name: 'Still editable' }, user.key));
+  });
+
+  await t.test('failed S3 writes and duplicate identity commits clean bytes without attaching metadata', async () => {
+    let failedKey = '';
+    const failing: ObjectStorage = {
+      put: async (key, bytes, mime) => { failedKey = key; await storage.put(key, bytes, mime); throw new Error('Write acknowledgement lost'); },
+      get: (key) => storage.get(key), delete: (key) => storage.delete(key),
+    };
+    const failedId = { ...id, serial: 'failed' };
+    await assert.rejects(new MediaService(store, failing).report({ name: 'Failed', identifiers: [failedId] }, context, photo()), /acknowledgement/);
+    assert.equal(await store.getAsset(failedId, user.key), null);
+    await assert.rejects(storage.get(failedKey));
+    const before = (await store.getAsset(id, user.key))!.photos.length;
+    await assert.rejects(media.report(input, context, photo()), /already claimed/);
+    assert.equal((await store.getAsset(id, user.key))!.photos.length, before);
+    const dangling = await query("MATCH (:Asset)-[:HAS_PHOTO]->(m:Media) WHERE m.state <> 'attached' RETURN m");
+    assert.equal(dangling.records.length, 0);
+  });
+
+  await t.test('failed deletion and abandoned upload recover after restart; attached photo survives ambiguous commit', async () => {
+    let failedKey = '';
+    const failing: ObjectStorage = {
+      put: async (key, bytes, mime) => { failedKey = key; await storage.put(key, bytes, mime); throw new Error('Upload failed'); },
+      get: (key) => storage.get(key), delete: async () => { throw new Error('Storage unavailable'); },
+    };
+    await assert.rejects(new MediaService(store, failing).add(id, user.key, photo()));
+    assert.deepEqual(Buffer.from(await storage.get(failedKey)), png);
+    const abandoned = await store.reservePhoto('image/png', png.length);
+    await storage.put(abandoned, png, 'image/png');
+    await query("MATCH (m:Media) WHERE m.state <> 'attached' SET m.expiresAt = datetime() - duration('PT1M')");
+    await new MediaService(await IdentityStore.open(driver), storage).cleanup();
+    await assert.rejects(storage.get(failedKey)); await assert.rejects(storage.get(abandoned));
+    assert.equal((await query("MATCH (m:Media) WHERE m.state <> 'attached' RETURN m")).records.length, 0);
+    const attached = (await store.getAsset(id, user.key))!.photos[0].key;
+    await media.cleanup(attached);
+    assert.deepEqual(Buffer.from(await storage.get(attached)), png);
+  });
+});
