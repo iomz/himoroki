@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { validateSettings, type Settings } from './settings.js';
 import type { Driver, ManagedTransaction } from 'neo4j-driver';
+import { int } from 'neo4j-driver';
+import { assetCursor, type AssetPageRequest, type AssetScope } from './asset-page.js';
 import {
   canonicalClaims, canonicalIdentifier, record, requiredText, ValidationError,
   type AssetIdentifier, type IdentifierClaim,
@@ -22,6 +24,7 @@ export type Asset = Readonly<{
   photos: readonly Photo[];
 }>;
 export type Photo = { key: string; contentType: string; size: number };
+export type AssetPage = { assets: Asset[]; total: number; matching: number; scopes: Record<AssetScope, number>; nextCursor: string | null };
 export type ReportAsset = {
   name: string;
   identifiers: readonly IdentifierClaim[];
@@ -215,27 +218,56 @@ export class IdentityStore {
     } finally { await session.close(); }
   }
 
-  async findAssets(actorKey: string, text: string): Promise<Asset[]> {
+  async findAssets(actorKey: string, { q: text, scope, limit, after }: AssetPageRequest): Promise<AssetPage> {
     const session = this.driver.session();
     try {
       const result = await session.executeRead((tx) => tx.run(`
-        MATCH (a:Asset)-[:IDENTIFIED_BY]->(i:Identifier)
-        WHERE (a.isPublic = true OR ${collaboration}) AND toLower(a.name) CONTAINS toLower($text)
-        WITH a, i ORDER BY a.name, i.scheme, i.value, i.serial LIMIT 100
-        WITH a, i AS identity
-        MATCH (a)-[:REPORTED_BY]->(u:User)
-        MATCH (g:Group)-[:CAN_COLLABORATE]->(a)
-        OPTIONAL MATCH (a)-[:OWNED_BY]->(o:Owner)
-        WITH a, identity, u, o, collect(g { .key, .name }) AS groups
-        RETURN a { .name, .isPublic, reportedAt: toString(a.reportedAt),
-          reportedBy: u { .key, .name }, owner: o { .key, .name }, groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] } AS asset,
-          identity { .scheme, .value, .serial } AS identifier`, { actorKey, text }));
-      return result.records.map((row) => {
-        const i = row.get('identifier');
+        CALL {
+          MATCH (a:Asset)-[:IDENTIFIED_BY]->(:Identifier)
+          WHERE a.isPublic = true OR ${collaboration}
+          WITH a, toLower(a.name) CONTAINS toLower($text) AS matches,
+            ${collaboration} AS inGroup,
+            EXISTS { MATCH (a)-[:REPORTED_BY]->(:User {key: $actorKey}) } AS mine
+          RETURN count(a) AS total,
+            {all: count(CASE WHEN matches THEN 1 END),
+             mine: count(CASE WHEN matches AND mine THEN 1 END),
+             group: count(CASE WHEN matches AND inGroup THEN 1 END),
+             public: count(CASE WHEN matches AND a.isPublic = true THEN 1 END)} AS scopes
+        }
+        CALL {
+          MATCH (a:Asset)-[:IDENTIFIED_BY]->(i:Identifier)
+          WHERE (a.isPublic = true OR ${collaboration}) AND toLower(a.name) CONTAINS toLower($text)
+            AND ($scope = 'all' OR ($scope = 'public' AND a.isPublic = true)
+              OR ($scope = 'group' AND ${collaboration})
+              OR ($scope = 'mine' AND EXISTS { MATCH (a)-[:REPORTED_BY]->(:User {key: $actorKey}) }))
+            AND ($after IS NULL OR a.name > $after.name
+              OR (a.name = $after.name AND i.scheme > $after.scheme)
+              OR (a.name = $after.name AND i.scheme = $after.scheme AND i.value > $after.value)
+              OR (a.name = $after.name AND i.scheme = $after.scheme AND i.value = $after.value AND i.serial > $after.serial))
+          WITH a, i ORDER BY a.name, i.scheme, i.value, i.serial LIMIT $fetchSize
+          WITH a, i AS identity
+          MATCH (a)-[:REPORTED_BY]->(u:User)
+          MATCH (g:Group)-[:CAN_COLLABORATE]->(a)
+          OPTIONAL MATCH (a)-[:OWNED_BY]->(o:Owner)
+          WITH a, identity, u, o, collect(g { .key, .name }) AS groups
+          ORDER BY a.name, identity.scheme, identity.value, identity.serial
+          RETURN collect({asset: a { .name, .isPublic, reportedAt: toString(a.reportedAt),
+            reportedBy: u { .key, .name }, owner: o { .key, .name }, groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] },
+            identifier: identity { .scheme, .value, .serial }}) AS rows
+        }
+        RETURN total, scopes, rows`, { actorKey, text, scope, after, fetchSize: int(limit + 1) }));
+      const row = result.records[0];
+      const rows = row.get('rows') as { asset: Omit<Asset, 'identifier'>; identifier: { scheme: string; value: string; serial: string } }[];
+      const assets = rows.slice(0, limit).map((row) => {
+        const i = row.identifier;
         const identifier: AssetIdentifier = i.scheme === 'sgtin'
           ? { scheme: 'sgtin', gtin: i.value, serial: i.serial } : { scheme: 'grai', grai: i.value };
-        return { ...row.get('asset'), identifier } as Asset;
+        return { ...row.asset, identifier } as Asset;
       });
+      const scopes = Object.fromEntries(Object.entries(row.get('scopes')).map(([key, value]) =>
+        [key, (value as { toNumber(): number }).toNumber()])) as Record<AssetScope, number>;
+      return { assets, total: row.get('total').toNumber(), scopes, matching: scopes[scope],
+        nextCursor: rows.length > limit ? assetCursor(text, assets.at(-1)!, scope) : null };
     } finally { await session.close(); }
   }
 

@@ -37,8 +37,8 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
 }
 export default function AssetPage({ loaderData: { asset, canEdit, settings }, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== 'idle';
-  return <main>
-    <Link to="/">← Inventory</Link><h1>{asset.name}</h1>
+  return <>
+    <Link to="/" className="back-link">← Assets</Link><div className="page-heading"><div><p className="eyebrow">Asset</p><h1>{asset.name}</h1></div><span className="badge">{asset.isPublic ? "Public" : "Group access"}</span></div>
     {actionData?.error && <p role="alert">{actionData.error}</p>}
     <section className="panel"><h2>Asset identity</h2><dl>
       <dt>Scheme</dt><dd>{asset.identifier.scheme.toUpperCase()}</dd>
@@ -68,5 +68,7 @@ export default function AssetPage({ loaderData: { asset, canEdit, settings }, ac
         <button>Save changes</button>
       </fieldset></Form>
     </section>}
-  </main>;
+  </>;
 }
+
+export { WorkspaceError as ErrorBoundary } from '../route-error';

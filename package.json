@@ -17,7 +17,9 @@
     "test:integration": "node scripts/test-identity.mjs",
     "admin:grant": "node --import tsx --env-file-if-exists=.env server/grant-admin.ts",
     "setup:env": "node scripts/setup-env.mjs",
-    "test:setup": "node --test scripts/setup-env.test.mjs"
+    "test:setup": "node --test scripts/setup-env.test.mjs",
+    "demo:seed": "node --import tsx --env-file-if-exists=.env scripts/demo/cli.ts seed",
+    "demo:reset": "node --import tsx --env-file-if-exists=.env scripts/demo/cli.ts reset"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",

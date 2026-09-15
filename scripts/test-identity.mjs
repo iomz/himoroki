@@ -37,7 +37,7 @@ for (const testFile of readdirSync('server').filter((file) => file.endsWith('.in
     }
     await driver.close();
     driver = undefined;
-    if (testFile === 'media.integration.test.ts') {
+    if (['media.integration.test.ts', 'demo.integration.test.ts'].includes(testFile)) {
       await exec('docker', ['run', '--rm', '-d', '--name', name + '-s3', '-p', '127.0.0.1::8080',
         '-e', 'ADMIN_PASSWORD=' + password, '-e', 'JWT=' + randomUUID() + randomUUID(),
         '-e', 'DEFAULT_ACCESS_KEY=' + name, '-e', 'DEFAULT_SECRET_KEY=' + password,

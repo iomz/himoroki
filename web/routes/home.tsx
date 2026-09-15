@@ -1,151 +1,120 @@
-import { Form, Link, redirect, useNavigation } from 'react-router';
-import { useState } from 'react';
-import { api, authClient, unwrap, assetPath } from '../api';
-import type { AssetIdentifier } from '../../server/identity.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, redirect } from 'react-router';
+import { api, unwrap, assetPath } from '../api';
+import type { Asset, AssetPage } from '../../server/identity-store';
+import type { AssetScope } from '../../server/asset-page';
+import { Icon } from '../icon';
 import type { Route } from './+types/home';
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const { user, isAdmin } = await unwrap(await api.me.$get());
-  const { settings } = await unwrap(await api.settings.$get());
-  const q = new URL(request.url).searchParams.get('q') ?? '';
-  if (!user) return { user, isAdmin, settings, q, groups: [], assets: [] };
-  const [{ groups }, { assets }] = await Promise.all([
-    api.groups.$get().then(unwrap), api.assets.$get({ query: { q } }).then(unwrap),
-  ]);
-  return { user, isAdmin, settings, q, groups, assets };
+  if (!(await unwrap(await api.me.$get())).user) throw redirect('/signin');
+  const params = new URL(request.url).searchParams;
+  const q = params.get('q') ?? '';
+  const scope = params.get('scope') ?? 'all';
+  const page = await unwrap(await api.assets.$get({ query: { q, scope } }, { init: { signal: request.signal } }));
+  return { page, q, scope: scope as AssetScope };
 }
 
-export async function clientAction({ request }: Route.ClientActionArgs) {
-  const data = await request.formData();
-  const text = (key: string) => String(data.get(key) ?? '');
-  try {
-    switch (text('intent')) {
-      case 'signup':
-      case 'signin': {
-        const body = { email: text('email'), password: text('password'), name: text('name') };
-        const result = text('intent') === 'signup' ? await authClient.signUp.email(body) : await authClient.signIn.email(body);
-        if (result.error) throw new Error(result.error.message ?? 'Sign-in failed');
-        break;
-      }
-      case 'signout': {
-        const result = await authClient.signOut();
-        if (result.error) throw new Error(result.error.message ?? 'Sign-out failed');
-        break;
-      }
-      case 'settings':
-        await unwrap(await api.settings.$patch({ json: { requirePhoto: data.get('requirePhoto') === 'on', displayTimezone: text('displayTimezone') } }));
-        break;
-      case 'group':
-        await unwrap(await api.groups.$post({ json: { name: text('name') } }));
-        break;
-      case 'member':
-        await unwrap(await api.groups[':key'].members.$post({ param: { key: text('groupKey') }, json: { userKey: text('userKey') } }));
-        break;
-      case 'leave':
-        await unwrap(await api.groups[':key'].membership.$delete({ param: { key: text('groupKey') } }));
-        break;
-      case 'report': {
-        const identifier: AssetIdentifier = text('scheme') === 'sgtin'
-          ? { scheme: 'sgtin', gtin: text('gtin'), serial: text('serial') }
-          : { scheme: 'grai', grai: text('grai') };
-        const form = new FormData();
-        form.set('report', JSON.stringify({ name: text('name'), identifiers: [identifier], groupKey: text('groupKey') }));
-        const photo = data.get('photo');
-        if (photo instanceof File && photo.size) form.set('photo', photo);
-        const { asset } = await unwrap(await fetch('/api/reports', { method: 'POST', body: form }));
-        return redirect(assetPath(asset.identifier));
-      }
-      default: throw new Error('Unknown action');
+export default function Assets({ loaderData: { page, q, scope } }: Route.ComponentProps) {
+  return <Inventory key={JSON.stringify([q, scope])} initial={page} q={q} scope={scope} />;
+}
+
+function Inventory({ initial, q, scope }: { initial: AssetPage; q: string; scope: AssetScope }) {
+  const [page, setPage] = useState(initial);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const pending = useRef<AbortController | null>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setPage(initial);
+    setError(false);
+    setLoading(false);
+    return () => { pending.current?.abort(); pending.current = null; };
+  }, [initial]);
+
+  const loadMore = useCallback(async () => {
+    if (!page.nextCursor || pending.current) return;
+    const controller = new AbortController();
+    pending.current = controller;
+    setLoading(true);
+    setError(false);
+    try {
+      const next = await unwrap(await api.assets.$get({ query: { q, scope, cursor: page.nextCursor } },
+        { init: { signal: controller.signal } }));
+      if (controller.signal.aborted) return;
+      setPage((previous) => {
+        // Live edits can move an Asset in the name ordering. Keep one row per supported identity.
+        const assets = new Map(previous.assets.map((asset) => [assetPath(asset.identifier), asset]));
+        next.assets.forEach((asset) => assets.set(assetPath(asset.identifier), asset));
+        return { ...next, assets: [...assets.values()] };
+      });
+    } catch {
+      if (!controller.signal.aborted) setError(true);
+    } finally {
+      if (!controller.signal.aborted) { pending.current = null; setLoading(false); }
     }
-    return redirect('/');
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Request failed' };
-  }
+  }, [page.nextCursor, q, scope]);
+
+  useEffect(() => {
+    if (!sentinel.current || !page.nextCursor || loading || error || !('IntersectionObserver' in window)) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: '300px' });
+    observer.observe(sentinel.current);
+    return () => observer.disconnect();
+  }, [page.nextCursor, loading, error, loadMore]);
+
+  const count = new Intl.NumberFormat();
+  return <>
+    <div className="page-heading"><div><p className="eyebrow">Inventory</p><h1>Assets</h1>
+      <p>{q ? `Results for “${q}”` : 'Physical things, shared knowledge, lasting identity.'}</p></div>
+      <Link to="/assets/report" className="button"><Icon name="plus" />Report Asset</Link>
+    </div>
+    <section className="inventory" aria-label="Asset inventory" aria-busy={loading}>
+      <div className="inventory-toolbar">
+        <nav className="inventory-scopes" aria-label="Asset scope">
+          {([['all', 'All'], ['mine', 'Mine'], ['group', 'Group access'], ['public', 'Public']] as const).map(([value, label]) =>
+            <Link key={value} to={'/?' + new URLSearchParams({ ...(q ? { q } : {}), scope: value })}
+              aria-current={scope === value ? 'page' : undefined} className={scope === value ? 'active' : ''}
+              title={value === 'mine' ? 'Readable Assets you originally reported' : undefined}>
+              {label}<span>{count.format(page.scopes[value])}</span>
+            </Link>)}
+        </nav>
+        <span className="inventory-count" role="status">{count.format(page.matching)} {page.matching === 1 ? 'asset' : 'assets'}</span>
+      </div>
+      {q && <p className="search-context"><Link to={'/?' + new URLSearchParams({ scope })}>Clear search</Link></p>}
+      {!page.assets.length ? <div className="panel empty-state"><h2>{q || scope !== 'all' ? 'No matching Assets' : 'Your inventory starts here'}</h2>
+        <p>{q || scope !== 'all' ? 'Try another scope or search by name.' : 'Report an Asset with its existing identifier and choose a Group to collaborate with.'}</p>
+        {!q && scope === 'all' && <Link to="/assets/report">Report your first Asset →</Link>}</div>
+        : <ul className="inventory-list">{page.assets.map((asset) => <li key={assetPath(asset.identifier)}>
+          <Link className="inventory-row" to={assetPath(asset.identifier)}>
+            <Thumbnail key={asset.photos[0]?.key ?? 'none'} asset={asset} />
+            <div className="inventory-row-body"><strong>{asset.name}</strong>
+              <span className="asset-identifier">{asset.identifier.scheme.toUpperCase()} · {asset.identifier.scheme === 'sgtin' ? `${asset.identifier.gtin} / ${asset.identifier.serial}` : asset.identifier.grai}</span>
+              <span className="asset-context"><Icon name="groups" /><span>{asset.groups.map((group) => group.name).join(', ')}</span><span className="context-divider">·</span><span>Reported by {asset.reportedBy.name}</span></span>
+            </div>
+              <span className={'badge ' + (asset.isPublic ? 'public' : '')}><Icon name={asset.isPublic ? 'globe' : 'lock'} />{asset.isPublic ? 'Public' : 'Group access'}</span>
+          </Link>
+        </li>)}</ul>}
+      <div ref={sentinel} className="inventory-load">
+        {loading && <p role="status"><span className="spinner" aria-hidden="true" />Loading more assets…</p>}
+        {error && <p role="alert">Could not load more Assets. Your current results are still here.</p>}
+        {page.nextCursor && <button className={error ? "secondary" : "load-more"} disabled={loading} onClick={() => void loadMore()}>
+          {error ? 'Retry loading' : 'Load more Assets'}
+        </button>}
+      </div>
+    </section>
+  </>;
 }
 
-export default function Home({ loaderData: { user, isAdmin, settings, groups, assets, q }, actionData }: Route.ComponentProps) {
-  const busy = useNavigation().state !== 'idle';
-  const [signup, setSignup] = useState(false);
-  const [scheme, setScheme] = useState('sgtin');
-  return <main>
-    <header><h1>Himoroki</h1><p>Identity and context for physical assets.</p></header>
-    {actionData?.error && <p role="alert">{actionData.error}</p>}
-    {!user ? <section className="panel auth">
-      <h2>{signup ? 'Create account' : 'Sign in'}</h2>
-      <Form method="post"><fieldset disabled={busy}>
-        <input type="hidden" name="intent" value={signup ? 'signup' : 'signin'} />
-        {signup && <label>Name<input name="name" required autoComplete="name" /></label>}
-        <label>Email<input name="email" type="email" required autoComplete="email" /></label>
-        <label>Password<input name="password" type="password" required minLength={signup ? 12 : undefined}
-          autoComplete={signup ? 'new-password' : 'current-password'} /></label>
-        {signup && <p className="hint">Use at least 12 characters.</p>}
-        <button type="submit">{signup ? 'Create account' : 'Sign in'}</button>
-      </fieldset></Form>
-      <button type="button" className="secondary" onClick={() => setSignup(!signup)}>
-        {signup ? 'Already have an account? Sign in' : 'Create an account'}
-      </button>
-    </section> : <>
-      <div className="toolbar"><p>Signed in as <strong>{user.name}</strong></p>
-        <Form method="post"><button name="intent" value="signout" disabled={busy}>Sign out</button></Form>
-      </div>
-      {isAdmin && <section className="panel"><h2>Instance settings</h2>
-        <Form method="post"><fieldset disabled={busy}>
-          <input type="hidden" name="intent" value="settings" />
-          <label className="checkbox"><input type="checkbox" name="requirePhoto" defaultChecked={settings.requirePhoto} />Require photo when reporting an Asset</label>
-          <label>Display timezone<input name="displayTimezone" defaultValue={settings.displayTimezone} required list="timezones" /></label>
-          <datalist id="timezones">{['UTC', ...Intl.supportedValuesOf('timeZone')].map((zone) => <option key={zone} value={zone} />)}</datalist>
-          <button>Save settings</button>
-        </fieldset></Form>
-      </section>}
-      <section className="panel">
-        <h2>Groups</h2>
-        <p className="hint">Your member key: <code>{user.key}</code>. Share it with a Group member to be added.</p>
-        <Form method="post" className="inline"><input type="hidden" name="intent" value="group" />
-          <label>New Group name<input name="name" required /></label><button disabled={busy}>Create Group</button>
-        </Form>
-        {!groups.length && <p>Create a Group, or ask an existing member to add you.</p>}
-        {groups.map((group) => <details key={group.key}><summary>{group.name}</summary>
-          <Form method="post" className="inline">
-            <input type="hidden" name="intent" value="member" /><input type="hidden" name="groupKey" value={group.key} />
-            <label>Member key<input name="userKey" required /></label><button disabled={busy}>Add member</button>
-          </Form>
-          <Form method="post"><input type="hidden" name="groupKey" value={group.key} />
-            <p className="hint">Leaving removes your access to this Group’s private Assets, including those you reported.</p>
-            <button name="intent" value="leave" disabled={busy} className="secondary">Leave Group</button>
-          </Form>
-        </details>)}
-      </section>
-      {groups.length > 0 && <section className="panel">
-        <h2>Report Asset</h2>
-        <Form method="post" encType="multipart/form-data"><fieldset disabled={busy}>
-          <input type="hidden" name="intent" value="report" />
-          <label>Reporting Group<select name="groupKey" required defaultValue={groups.length === 1 ? groups[0].key : ''}>
-            <option value="" disabled>Choose a Group</option>
-            {groups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
-          </select></label>
-          <label>Asset name<input name="name" required /></label>
-          <label>Identifier scheme<select name="scheme" value={scheme} onChange={(e) => setScheme(e.target.value)}>
-            <option value="sgtin">SGTIN — GTIN/JAN and serial</option><option value="grai">GRAI</option>
-          </select></label>
-          {scheme === 'sgtin' ? <div className="grid">
-            <label>GTIN / JAN<input name="gtin" inputMode="numeric" required /></label>
-            <label>Serial<input name="serial" maxLength={20} required /></label>
-          </div> : <label>GRAI<input name="grai" required maxLength={30} />
-            <span className="hint">AI 8003 value, including leading zero and individual serial.</span></label>}
-          <p className="hint">Use an existing identifier. New Assets are private to the selected Group.</p>
-          <label>Photo{settings.requirePhoto ? " (required)" : " (optional)"}<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required={settings.requirePhoto} /></label>
-          <p className="hint">JPEG, PNG, or WebP, up to 10 MiB.</p>
-          <button>Report Asset</button>
-        </fieldset></Form>
-      </section>}
-      <section className="panel"><h2>Find Assets</h2>
-        <Form method="get" className="inline"><label>Search by name<input name="q" defaultValue={q} maxLength={200} /></label><button>Find</button></Form>
-        {!assets.length ? <p>No matching Assets.</p> : <ul className="assets">{assets.map((asset) =>
-          <li key={assetPath(asset.identifier)}><Link to={assetPath(asset.identifier)}>{asset.name}</Link>
-            <span>{asset.isPublic ? 'Public' : 'Group access'}</span></li>)}
-        </ul>}
-        <p className="hint">Up to 100 matching Assets you can read.</p>
-      </section>
-    </>}
-  </main>;
+function Thumbnail({ asset }: { asset: Asset }) {
+  const [failed, setFailed] = useState(false);
+  const photo = asset.photos[0];
+  return <div className="asset-thumbnail">{photo && !failed
+    ? <img src={'/api/photos/' + photo.key + '?' + new URLSearchParams(asset.identifier)}
+        alt={'Photo of ' + asset.name} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+    : <span title={failed ? 'Photo unavailable' : 'No photo'}><Icon name="photo" /><span className="sr-only">{failed ? 'Photo unavailable' : 'No photo'}</span></span>}</div>;
 }
+
+export { WorkspaceError as ErrorBoundary } from '../route-error';

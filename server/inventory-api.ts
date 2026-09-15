@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { validator } from 'hono/validator';
+import { assetPageRequest } from './asset-page.js';
 import { maxPhotoBytes, type MediaService } from './media.js';
 import type { Auth } from './auth.js';
 import { canonicalIdentifier, record, requiredText, ValidationError } from './identity.js';
@@ -82,9 +83,7 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
     })
     .get('/assets', async (c) => {
       const key = actor(c.get('user'));
-      const text = c.req.query('q') ?? '';
-      if (text.length > 200) throw new ValidationError('Search is limited to 200 characters');
-      return c.json({ assets: await store.findAssets(key, text) });
+      return c.json(await store.findAssets(key, assetPageRequest(c.req.query())));
     })
     .post('/assets', validator('json', (value) => {
       const input = record(value, ['name', 'identifiers', 'ownerKey', 'groupKey']);

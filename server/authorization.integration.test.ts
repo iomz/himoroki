@@ -52,6 +52,7 @@ test('local authentication and Group authorization', { skip: !uri || !password }
       assert.ok(user.key && user.key !== 'forged');
       people.push(user);
     }
+    assert.deepEqual(await (await reporter.request('/assets')).json(), { assets: [], total: 0, matching: 0, scopes: { all: 0, mine: 0, group: 0, public: 0 }, nextCursor: null });
     const session = driver.session();
     try {
       const result = await session.run(`MATCH (u:User), (a:AuthAccount {userId: u.id})
@@ -158,4 +159,83 @@ test('local authentication and Group authorization', { skip: !uri || !password }
       assert.deepEqual(result.records.map((r) => r.get('type')), ['REPORTED_BY']);
     } finally { await session.close(); }
   });
+
+  await t.test('cursor pages count only authorized Assets and traverse duplicate names beyond 100', async () => {
+    const group = await store.createReportingGroup('Inventory', people[1].key);
+    const context = { actorKey: people[1].key, groupKey: group.key };
+    for (let i = 0; i < 105; i++) {
+      await store.reportAsset({ name: i < 103 ? 'Inventory Twin' : 'Inventory Other', identifiers: [i % 2
+        ? { scheme: 'grai', grai: '00614141234561' + String(i).padStart(3, '0') }
+        : { scheme: 'sgtin', gtin: '00614141123452', serial: 'page-' + String(i).padStart(3, '0') }] }, context);
+    }
+    const foreignGroup = await store.createReportingGroup('Foreign', people[2].key);
+    for (const serial of ['hidden', 'visible']) {
+      const identifier = { scheme: 'sgtin' as const, gtin: '00614141123452', serial };
+      await store.reportAsset({ name: 'Inventory Twin', identifiers: [identifier] },
+        { actorKey: people[2].key, groupKey: foreignGroup.key });
+      if (serial === 'visible') await store.updateAsset(identifier, { isPublic: true }, people[2].key);
+    }
+    for (const [scope, count] of [['all', 107], ['mine', 105], ['group', 106], ['public', 1]] as const) {
+      const page = await (await member.request('/assets?scope=' + scope)).json();
+      assert.equal(page.matching, count);
+      assert.deepEqual(page.scopes, { all: 107, mine: 105, group: 106, public: 1 });
+      if (scope === 'mine') assert.ok(page.assets.every((a: { reportedBy: { key: string } }) => a.reportedBy.key === people[1].key));
+      if (scope === 'public') assert.ok(page.assets.every((a: { isPublic: boolean }) => a.isPublic));
+    }
+    const first = await (await member.request('/assets')).json();
+    assert.equal(first.assets.length, 30);
+    assert.equal(first.total, 107);
+    assert.equal(first.matching, 107);
+    const noMatch = await (await member.request('/assets?q=absent')).json();
+    assert.deepEqual(noMatch, { assets: [], total: 107, matching: 0, scopes: { all: 0, mine: 0, group: 0, public: 0 }, nextCursor: null });
+    const empty = await (await reporter.request('/assets?q=absent')).json();
+    assert.deepEqual(empty, { assets: [], total: 1, matching: 0, scopes: { all: 0, mine: 0, group: 0, public: 0 }, nextCursor: null });
+    assert.equal((await anonymous.request('/assets?limit=1')).status, 401);
+
+    let cursor: string | null = null;
+    const identities: string[] = [];
+    let firstCursor = '';
+    do {
+      const params = new URLSearchParams({ q: 'inVENTory twin', limit: '17', ...(cursor ? { cursor } : {}) });
+      const response = await member.request('/assets?' + params);
+      assert.equal(response.status, 200, await response.clone().text());
+      const page = await response.json();
+      assert.equal(page.total, 107);
+      assert.equal(page.matching, 104);
+      assert.ok(page.assets.length > 0 && page.assets.length <= 17);
+      for (const asset of page.assets) {
+        assert.notEqual(asset.identifier.serial, 'hidden');
+        identities.push(JSON.stringify(asset.identifier));
+      }
+      cursor = page.nextCursor;
+      if (!firstCursor && cursor) firstCursor = cursor;
+      assert.ok(identities.length <= 104, 'pagination must terminate');
+    } while (cursor);
+    assert.equal(identities.length, 104);
+    assert.equal(new Set(identities).size, 104, 'equal names must not duplicate or omit identities');
+    assert.deepEqual(identities, [...identities].sort(), 'supported identifiers break name ties consistently');
+    const atLimit = await (await member.request('/assets?q=inVENTory+twin&limit=100')).json();
+    assert.equal(atLimit.assets.length, 100);
+    const tail = await (await member.request('/assets?' + new URLSearchParams({ q: 'inVENTory twin', cursor: atLimit.nextCursor }))).json();
+    assert.equal(tail.assets.length, 4);
+    assert.equal(tail.nextCursor, null);
+
+    for (const suffix of ['limit=0', 'limit=101', 'limit=1.5', 'limit=NaN', 'cursor=invalid', 'q=different&cursor=' + firstCursor]) {
+      assert.equal((await member.request('/assets?' + suffix)).status, 400, suffix);
+    }
+    await store.leaveGroup(people[1].key, group.key);
+    const revoked = await (await member.request('/assets?' + new URLSearchParams({ q: 'inVENTory twin', cursor: firstCursor }))).json();
+    assert.equal(revoked.total, 2);
+    assert.equal(revoked.matching, 1);
+    assert.ok(revoked.assets.every((asset: { isPublic: boolean }) => asset.isPublic));
+    assert.equal(revoked.nextCursor, null);
+    const mineAfterLeaving = await (await member.request('/assets?scope=mine')).json();
+    assert.equal(mineAfterLeaving.matching, 0);
+    assert.equal(mineAfterLeaving.assets.length, 0);
+    assert.deepEqual(mineAfterLeaving.scopes, { all: 2, mine: 0, group: 1, public: 1 });
+    const searchScopes = await (await stranger.request('/assets?q=Twin&scope=mine')).json();
+    assert.equal(searchScopes.matching, 2);
+    assert.deepEqual(searchScopes.scopes, { all: 2, mine: 2, group: 2, public: 1 });
+  });
+
 });

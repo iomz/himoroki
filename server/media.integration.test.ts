@@ -71,6 +71,10 @@ test('S3 media, policy and administration', { skip: !uri || !password || !proces
   await t.test('photo access follows Asset visibility and membership, including revocation', async () => {
     const asset = (await store.getAsset(id, user.key))!;
     const key = asset.photos[0].key;
+    const inventory = await (await request('/assets?q=camERA&limit=1')).json();
+    assert.equal(inventory.matching, 1);
+    assert.deepEqual(inventory.assets[0].photos, asset.photos);
+    assert.deepEqual(inventory.assets[0].identifier, id);
     const path = '/photos/' + key + '?' + new URLSearchParams(id);
     assert.equal((await request(path)).status, 200);
     assert.equal((await request(path, 'GET', undefined, false)).status, 404);

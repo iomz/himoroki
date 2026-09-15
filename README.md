@@ -54,6 +54,58 @@ Alarik credentials and default bucket are seeded on first startup; changing envi
 To use another S3-compatible backend, configure `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` and provision a private bucket before starting Himoroki.
 The application needs HeadBucket, PutObject, GetObject, and DeleteObject access; it does not depend on Alarik administration APIs.
 
+## Development/demo dataset
+
+The demo tools create 140 entirely synthetic Assets, three local email/password accounts, four Groups, three Owners, and 47 photos using three bundled illustrations.
+Names, supported identifiers, relationships, and visibility are deterministic; internal keys, password hashes, and immutable reporting timestamps are generated normally.
+The 70 SGTIN and 70 GRAI values are checksum-valid synthetic examples, not identifiers for real inventory.
+Search by name using terms such as `camera`, `bench`, `studio`, or `backpack`; Owners appear in Asset details.
+
+Run the tools on the host with Node 24, installed dependencies (`pnpm install`), and your existing local `.env` credentials.
+For a fresh checkout, create `.env` with `pnpm setup:env --dev` first.
+Stop `pnpm dev`/`pnpm start` before seeding, or stop the Compose app as below; leave Neo4j and Alarik running.
+
+```sh
+docker compose stop app
+docker compose up -d --wait neo4j alarik
+HIMOROKI_DEMO=local pnpm demo:seed
+```
+
+Seed requires empty application data and an empty media bucket; an initialized Settings node is allowed and receives optional-photo/UTC defaults.
+A repeated seed fails without modifying the existing dataset rather than duplicating it.
+
+**Reset permanently deletes all application data in the configured Neo4j database and every object in the configured `himoroki-photos` bucket, including data you created yourself, before recreating the demo.**
+It preserves database schema, bucket configuration, and infrastructure credentials.
+To replace an existing local development dataset yourself, stop the app and run:
+
+```sh
+HIMOROKI_DEMO=local pnpm demo:reset -- --yes
+```
+
+Both commands require explicit `HIMOROKI_DEMO=local` opt-in, non-production `NODE_ENV`, an HTTP loopback `APP_URL`, a direct loopback `bolt://` Neo4j endpoint, and a loopback HTTP S3 endpoint using the dedicated `himoroki-photos` bucket.
+Use the default local Alarik setup; container service names, remote hosts, and wildcard addresses are rejected.
+Demo commands also require object listing and bucket-versioning inspection permissions; enabled or suspended bucket versioning is rejected so reset cannot leave hidden media versions.
+The opt-in asserts that these are dedicated, disposable development services: do not use forwarded remote ports or shared stores.
+The tools refuse a responding app/Vite port; stop any other processes connected to the same stores and do not run demo commands concurrently.
+If reset or seed fails partway through, keep the app stopped, fix the reported cause, and rerun the confirmed reset; database and object-storage changes cannot commit atomically together.
+
+Resume `pnpm dev` when `APP_URL` is `http://127.0.0.1:5173`, or `docker compose up -d --build app` for the full local deployment with `APP_URL=http://127.0.0.1:3000`.
+Use the same local configuration and infrastructure credentials as before.
+All demo accounts use password **`Himoroki-demo-only-2026!`**; never expose this dataset or these credentials on a public deployment.
+
+| Account | Role | All | Mine | Group access | Public |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `evaluator@demo.invalid` | System administrator | 124 | 64 | 120 | 34 |
+| `collaborator@demo.invalid` | Shared-Group collaborator | 88 | 56 | 72 | 34 |
+| `outsider@demo.invalid` | Unrelated Group member | 50 | 20 | 20 | 34 |
+
+Counts above apply before searching or editing; scopes overlap.
+The evaluator cannot read 16 private Assets in Private Store, despite being a system administrator.
+Mine filters immutable reporting provenance within readable Assets and grants no access.
+The evaluator can open Administration → Settings; the other accounts cannot.
+The tools add no demo fields or relationships to the domain model.
+`pnpm test:integration` verifies seed and destructive reset on disposable Neo4j and Alarik containers only.
+
 ## Identity integrity
 
 `server/identity.ts` validates structured GS1 identifier claims.
@@ -84,13 +136,25 @@ Authentication uses the same `User` nodes as domain provenance, with a server-as
 This avoids a second application database and a custom authentication adapter.
 The adapter and Better Auth versions are pinned; upgrades must pass the real Neo4j integration tests.
 
-Create an account, create a Group or ask an existing member to add your member key, then select a reporting Group.
+Create an account, open Groups from the sidebar to create a Group or ask an existing member to add your member key, then report an Asset from the Assets workspace.
+The persistent header searches accessible Assets by name on Enter; ⌘K or Ctrl+K focuses search and Escape blurs it.
+The account menu provides sign-out.
+The Assets workspace shows compact photo rows and loads more inventory as you scroll.
+All, Mine, Group access, and Public filter readable Assets; their overlapping counts reflect the current search.
+Mine means originally reported by you and never grants access.
+Identifiers, ownership, and photos remain within each Asset workflow.
 Any current Group member can add an existing User; Users can leave their own Groups.
 A sole Group is selected automatically, but reporting always sends an explicit Group key.
 Group members can read and edit its private Assets.
 `reportedBy` grants no access and remains unchanged after the reporter leaves the Group.
 Marking an Asset public permits anyone with its identifier link to read the full Asset representation, never to edit it.
 New Assets are private, and there are no direct User-to-Asset ACLs.
+
+`GET /api/assets` keeps case-insensitive name-substring search through `q` and returns `assets`, `total`, `matching`, `scopes`, and `nextCursor`.
+Counts include only Assets the signed-in User can read; pages default to 30 entries, with `limit` between 1 and 100.
+Pass `nextCursor` as `cursor` with the same `q` and `scope` to continue; a null cursor ends the results.
+`scope` accepts `all` (default), `mine`, `group`, or `public`; the response includes matching counts for every scope.
+Ordering remains name followed by supported identifier; each request checks current access and data rather than holding an inventory snapshot.
 
 Unsafe API requests require an Origin matching `APP_URL`.
 Better Auth rate limiting uses the TCP peer address set by the Node server; forwarded client IP headers are not trusted, so clients behind one reverse proxy share its rate-limit bucket.
@@ -113,7 +177,7 @@ pnpm admin:grant person@example.com
 ```
 
 For the containerized application, use `docker compose exec app node dist/server/grant-admin.js person@example.com`.
-Reload the inventory page to see Instance settings.
+Reload the application and open Settings under Administration in the sidebar to see Instance settings.
 Administration permits changing only the photo-on-report policy and the instance display timezone; it grants no Asset access.
 The defaults are optional photos and UTC display.
 The photo requirement applies to new reports, including direct API requests, and requires a photo in the same reporting submission.
