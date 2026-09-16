@@ -1,5 +1,6 @@
 import { Form, redirect, useNavigation } from 'react-router';
 import { api, unwrap } from '../api';
+import { TimezonePicker } from '../timezone-picker';
 import type { Route } from './+types/administration';
 
 export async function clientLoader() {
@@ -27,8 +28,7 @@ export default function Administration({ loaderData: { settings }, actionData }:
         <Form method="post"><fieldset disabled={busy}>
           <input type="hidden" name="intent" value="settings" />
           <label className="checkbox"><input type="checkbox" name="requirePhoto" defaultChecked={settings.requirePhoto} />Require photo when reporting an Asset</label>
-          <label>Display timezone<input name="displayTimezone" defaultValue={settings.displayTimezone} required list="timezones" /></label>
-          <datalist id="timezones">{['UTC', ...Intl.supportedValuesOf('timeZone')].map((zone) => <option key={zone} value={zone} />)}</datalist>
+          <TimezonePicker name="displayTimezone" value={settings.displayTimezone} />
           <button>Save settings</button>
         </fieldset></Form>
 
