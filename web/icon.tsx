@@ -1,4 +1,5 @@
 const paths = {
+  members: 'M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-3a7 7 0 0 1 14 0v3 M19 4a3 3 0 0 1 0 6 M22 20v-3a5 5 0 0 0-3-4',
   assets: 'M4 7h16v14H4z M8 7V3h8v4 M9 11v6 M15 11v6',
   groups: 'M4 9h16v12H4z M8 9V5h8v4 M9 5V2h6v3 M8 13h2v3H8z M14 13h2v3h-2z',
   settings: 'm9 3 1-2h4l1 2 2 1 2-1 2 3-1 2v3l1 2-2 3-2-1-2 1-1 3h-4l-1-3-2-1-2 1-2-3 1-2V8L2 6l2-3 2 1z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0',

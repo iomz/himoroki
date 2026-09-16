@@ -162,3 +162,41 @@ dt { color: #64756b; } dd { margin: 0; overflow-wrap: anywhere; }
   .asset-context { font-size: .73rem; gap: .25rem .35rem; }
   .inventory-row .asset-identifier { font-size: .72rem; }
 }
+
+.member-toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; max-width: 40rem; }
+.member-toolbar input { background: #fff; }
+.member-toolbar span { color: #64756b; font-size: .8rem; white-space: nowrap; }
+.member-table-frame { overflow-x: auto; border: 1px solid #dce2d9; border-radius: .5rem; background: #fff; }
+.member-table { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: left; font-size: .86rem; }
+.member-table th { padding: .7rem 1rem; color: #687970; background: #f1f3ef; font-size: .72rem; font-weight: 600; letter-spacing: .03em; }
+.member-table th:nth-child(1) { width: 24%; }
+.member-table th:nth-child(2) { width: 28%; }
+.member-table th:nth-child(3) { width: 28%; }
+.member-table th:nth-child(4) { width: 20%; }
+.member-table td { padding: .9rem 1rem; border-top: 1px solid #e4e8e2; vertical-align: middle; overflow-wrap: anywhere; }
+.member-table tbody tr:hover { background: #f7f8f5; }
+.member-name-button { padding: 0; color: #226653; background: transparent; border: 0; border-radius: 0; font-weight: 600; text-decoration: underline; text-underline-offset: .2em; }
+.member-name-button:hover { color: #194f41; background: transparent; }
+.member-table time { color: #52645b; font-size: .8rem; }
+.member-role { display: inline-flex; }
+.member-role.administrator { background: #e3efea; color: #27634e; }
+.member-empty { border: 1px solid #dce2d9; border-radius: .5rem; background: #fff; }
+.member-dialog { width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 0; color: inherit; background: #fff; border: 1px solid #cad4cc; border-radius: .7rem; box-shadow: 0 20px 60px #102d2640; }
+.member-dialog::backdrop { background: #102d2673; }
+.member-dialog-card { padding: 1.5rem; }
+.member-dialog-heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1.4rem; }
+.member-dialog-heading h2 { margin: 0; }
+.dialog-close { width: 2.2rem; height: 2.2rem; padding: 0; flex-shrink: 0; color: #52645b; background: transparent; border-color: transparent; font-size: 1.5rem; line-height: 1; }
+.dialog-close:hover { color: #193e32; background: #edf2e9; }
+.account-profile-link { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: .8rem -.35rem; padding: .7rem .75rem; color: #244638; border-radius: .35rem; text-decoration: none; font-weight: 600; }
+.account-profile-link:hover { background: #edf2e9; }
+@media (max-width: 700px) {
+  .member-toolbar { align-items: stretch; flex-direction: column; gap: .45rem; }
+  .member-table-frame { overflow: visible; border: 0; background: transparent; }
+  .member-table, .member-table tbody { display: block; }
+  .member-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .member-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .55rem 1rem; margin-bottom: .8rem; padding: 1rem; border: 1px solid #dce2d9; border-radius: .5rem; background: #fff; }
+  .member-table td { display: grid; grid-template-columns: 4.25rem minmax(0, 1fr); gap: .7rem; grid-column: 1 / -1; padding: 0; border: 0; font-size: .82rem; }
+  .member-table td::before { content: attr(data-label); color: #687970; font-size: .72rem; font-weight: 600; }
+  .member-dialog-card { padding: 1.1rem; }
+}

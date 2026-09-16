@@ -24,7 +24,7 @@ for (const dev of [false, true]) {
     assert.equal(result.status, 0, result.stderr);
     const env = parseEnv(readFileSync(join(dir, '.env'), 'utf8'));
     assert.deepEqual(Object.keys(env).sort(), Object.keys(template).sort());
-    assert.equal(env.APP_URL, `http://127.0.0.1:${dev ? 5173 : 3000}`);
+    assert.equal(env.APP_URL, 'http://127.0.0.1:3000');
     for (const key of Object.keys(template).filter((key) => !credentials.includes(key) && key !== 'APP_URL')) {
       assert.equal(env[key], template[key]);
     }
@@ -35,6 +35,7 @@ for (const dev of [false, true]) {
     }
     if (process.platform !== 'win32') assert.equal(statSync(join(dir, '.env')).mode & 0o777, 0o600);
     assert.ok(result.stdout.includes(dev ? 'pnpm dev' : 'docker compose up -d --build --wait'));
+    assert.match(result.stdout, /Himoroki: http:\/\/127\.0\.0\.1:3000\//);
     const other = directory(t);
     assert.equal(run(other).status, 0);
     const second = parseEnv(readFileSync(join(other, '.env'), 'utf8'));

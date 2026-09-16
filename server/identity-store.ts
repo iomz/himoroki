@@ -10,6 +10,10 @@ import {
 
 export class DuplicateIdentityError extends Error {}
 export class ReferenceError extends Error {}
+export class AdministrationError extends Error {}
+export class LastAdministratorError extends Error {}
+export type Member = { key: string; name: string; email: string; isAdmin: boolean; createdAt: string | null };
+const memberProjection = `u { .key, .name, .email, isAdmin: coalesce(u.isAdmin, false), createdAt: toString(u.createdAt) }`;
 
 // Entity keys are internal references. Assets have no generated application ID.
 export type Entity = Readonly<{ key: string; name: string }>;
@@ -269,6 +273,47 @@ export class IdentityStore {
       return { assets, total: row.get('total').toNumber(), scopes, matching: scopes[scope],
         nextCursor: rows.length > limit ? assetCursor(text, assets.at(-1)!, scope) : null };
     } finally { await session.close(); }
+  }
+
+  async members(actorKey: string): Promise<Member[]> {
+    return this.write(async (tx) => {
+      const allowed = await tx.run('MATCH (:User {key: $actorKey, isAdmin: true}) RETURN true', { actorKey });
+      if (!allowed.records.length) throw new AdministrationError('Administrator access required');
+      const result = await tx.run(`MATCH (u:User) WHERE u.id IS NOT NULL RETURN ${memberProjection} AS member ORDER BY toLower(u.name), u.key`);
+      return result.records.map((row) => row.get('member'));
+    });
+  }
+
+  async profile(actorKey: string): Promise<Member> {
+    const result = await this.write((tx) => tx.run(`MATCH (u:User {key: $actorKey}) WHERE u.id IS NOT NULL RETURN ${memberProjection} AS member`, { actorKey }));
+    if (!result.records.length) throw new ReferenceError('User not found');
+    return result.records[0].get('member');
+  }
+
+  async updateMember(actorKey: string, targetKey: string, value: unknown): Promise<Member> {
+    const input = record(value, ['name', 'isAdmin']);
+    const name = requiredText(input.name, 'name');
+    if (typeof input.isAdmin !== 'boolean') throw new ValidationError('Administrator status must be a boolean');
+    return this.write(async (tx) => {
+      // Serialize role changes before checking the actor and counting administrators.
+      // Reuse the existing instance lock; no separate role or locking framework.
+      await tx.run("MATCH (s:Settings {key: 'instance'}) SET s.revision = s.revision + 1 RETURN s.key");
+      const allowed = await tx.run('MATCH (:User {key: $actorKey, isAdmin: true}) RETURN true', { actorKey });
+      if (!allowed.records.length) throw new AdministrationError('Administrator access required');
+      const target = await tx.run('MATCH (u:User {key: $targetKey}) WHERE u.id IS NOT NULL RETURN u.isAdmin AS admin', { targetKey });
+      if (!target.records.length) throw new ReferenceError('User not found');
+      if (input.isAdmin === false && target.records[0].get('admin') === true) {
+        const count = await tx.run('MATCH (u:User {isAdmin: true}) WHERE u.id IS NOT NULL RETURN count(u) AS count');
+        if (count.records[0].get('count').toNumber() <= 1) throw new LastAdministratorError('The final system administrator cannot be removed');
+      }
+      // Better Auth has no arbitrary-user update API in this configuration. Update
+      // its User node atomically with the role, without touching authentication data.
+      const result = await tx.run(`MATCH (u:User {key: $targetKey})
+        SET u.name = $name, u.updatedAt = $updatedAt
+        SET u.isAdmin = $isAdmin
+        RETURN ${memberProjection} AS member`, { targetKey, name, updatedAt: new Date().toISOString(), isAdmin: input.isAdmin });
+      return result.records[0].get('member');
+    });
   }
 
   async settings(): Promise<Settings> {

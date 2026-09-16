@@ -26,6 +26,7 @@ const app = createApp(async () => { await driver.verifyConnectivity(); });
 const appURL = process.env.APP_URL;
 const authSecret = process.env.BETTER_AUTH_SECRET;
 if (!appURL || !authSecret) throw new Error('APP_URL and BETTER_AUTH_SECRET are required');
+const applicationOrigin = new URL(appURL).origin;
 const store = await IdentityStore.open(driver);
 const storage = storageFromEnv();
 await storage.check();
@@ -41,7 +42,7 @@ app.use('/api/*', async (c, next) => {
   if (address) c.req.raw.headers.set('x-himoroki-client-ip', address);
   await next();
 });
-app.route('/api', createInventoryApi(store, auth, new URL(appURL).origin, media));
+app.route('/api', createInventoryApi(store, auth, applicationOrigin, media));
 
 // Unknown API paths must never fall through to the SPA.
 app.all('/api', (c) => c.json({ error: 'Not found' }, 404));
@@ -50,7 +51,10 @@ app.use('/assets/*', serveStatic({ root: './build/client' }));
 app.all('/assets/*', (c) => c.notFound());
 app.get('*', serveStatic({ path: './build/client/index.html' }));
 
-const server = serve({ fetch: app.fetch, port, hostname: '0.0.0.0' });
+const server = serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, () => {
+  console.log(`Himoroki: ${applicationOrigin}/`);
+  if (process.env.NODE_ENV !== 'production') console.log('Open this URL in your browser during development.');
+});
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     clearInterval(cleanupTimer);

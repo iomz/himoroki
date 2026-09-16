@@ -21,3 +21,13 @@ Keep administrative settings limited to photo-on-report policy and display timez
 System administration must not grant Asset access.
 Run `pnpm typecheck`, `pnpm test`, and `pnpm build` for application changes.
 Do not commit or push without explicit authorization.
+
+## Browser and GUI verification
+
+Unless explicitly requested, do not launch or attach to a browser, desktop application, or other GUI for manual interaction testing.
+
+Prefer automated unit, integration, API, typecheck, and build validation. The user performs routine manual UI/UX acceptance separately.
+
+Browser or GUI interaction may still be requested explicitly when it is necessary to investigate a browser-specific problem or reproduce an issue that cannot reasonably be validated otherwise.
+
+Do not treat the absence of agent-driven browser testing as incomplete validation when the relevant automated checks pass. Report what was validated automatically and leave manual UI acceptance to the user.

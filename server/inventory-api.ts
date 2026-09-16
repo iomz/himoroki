@@ -6,7 +6,7 @@ import { assetPageRequest } from './asset-page.js';
 import { maxPhotoBytes, type MediaService } from './media.js';
 import type { Auth } from './auth.js';
 import { canonicalIdentifier, record, requiredText, ValidationError } from './identity.js';
-import { DuplicateIdentityError, ReferenceError, type IdentityStore, type AssetChanges, type ReportAsset } from './identity-store.js';
+import { AdministrationError, LastAdministratorError, DuplicateIdentityError, ReferenceError, type IdentityStore, type AssetChanges, type ReportAsset } from './identity-store.js';
 
 type User = { key: string; name: string };
 type Env = { Variables: { user: User | null } };
@@ -36,6 +36,15 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       await next();
     })
     .get('/me', async (c) => c.json({ user: c.get('user'), isAdmin: await store.isAdmin(c.get('user')?.key ?? null) }))
+    .get('/profile', async (c) => c.json({ member: await store.profile(actor(c.get('user'))) }))
+    .patch('/profile', validator('json', (value) => record(value, ['name']) as { name: string }), async (c) => {
+      const key = actor(c.get('user'));
+      const name = requiredText(c.req.valid('json').name, 'name');
+      await auth.api.updateUser({ headers: c.req.raw.headers, body: { name } });
+      return c.json({ member: await store.profile(key) });
+    })
+    .get('/members', async (c) => c.json({ members: await store.members(actor(c.get('user'))) }))
+    .patch('/members/:key', validator('json', (value) => record(value, ['name', 'isAdmin']) as { name: string; isAdmin: boolean }), async (c) => c.json({ member: await store.updateMember(actor(c.get('user')), c.req.param('key'), c.req.valid('json')) }))
     .get('/settings', async (c) => c.json({ settings: await store.settings() }))
     .patch('/settings', async (c) => c.json({ settings: await store.updateSettings(actor(c.get('user')), await c.req.json()) }))
     .post('/reports', async (c) => {
@@ -107,6 +116,8 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       return c.json({ asset });
     })
     .onError((error, c) => {
+      if (error instanceof AdministrationError) return c.json({ error: error.message }, 403);
+      if (error instanceof LastAdministratorError) return c.json({ error: error.message }, 409);
       if (error instanceof SyntaxError) return c.json({ error: 'Invalid JSON' }, 400);
       if (error instanceof ValidationError) return c.json({ error: error.message }, 400);
       if (error instanceof ReferenceError) return c.json({ error: 'Resource or Group access not found' }, 404);

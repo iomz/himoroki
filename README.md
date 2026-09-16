@@ -31,10 +31,10 @@ docker compose up -d --wait neo4j alarik
 pnpm dev
 ```
 
-Development mode sets `APP_URL=http://127.0.0.1:5173`; the default sets `http://127.0.0.1:3000`.
-When switching an existing configuration between modes, edit `APP_URL` to match the browser origin and retain its credentials.
-Open the configured `APP_URL` after Vite and Hono start.
-The UI calls Hono through Vite's `/api` proxy; Hono connects to Neo4j.
+Open `http://127.0.0.1:3000` after Vite and Hono start; this is the canonical Himoroki application origin in development.
+For an existing local `.env`, set `APP_URL=http://127.0.0.1:3000` without replacing its stored credentials.
+React Router/Vite may also print `http://127.0.0.1:5173`, but that listener is development tooling rather than the Himoroki browser entry point.
+Hono connects to Neo4j.
 Startup requires Neo4j and an accessible private S3 bucket; it installs uniqueness constraints before listening.
 `GET /api/health` checks process liveness; `GET /api/ready` returns 503 if Neo4j becomes unreachable.
 
@@ -86,10 +86,10 @@ Both commands require explicit `HIMOROKI_DEMO=local` opt-in, non-production `NOD
 Use the default local Alarik setup; container service names, remote hosts, and wildcard addresses are rejected.
 Demo commands also require object listing and bucket-versioning inspection permissions; enabled or suspended bucket versioning is rejected so reset cannot leave hidden media versions.
 The opt-in asserts that these are dedicated, disposable development services: do not use forwarded remote ports or shared stores.
-The tools refuse a responding app/Vite port; stop any other processes connected to the same stores and do not run demo commands concurrently.
+The tools refuse a responding application port; stop any other processes connected to the same stores and do not run demo commands concurrently.
 If reset or seed fails partway through, keep the app stopped, fix the reported cause, and rerun the confirmed reset; database and object-storage changes cannot commit atomically together.
 
-Resume `pnpm dev` when `APP_URL` is `http://127.0.0.1:5173`, or `docker compose up -d --build app` for the full local deployment with `APP_URL=http://127.0.0.1:3000`.
+Resume `pnpm dev`, or `docker compose up -d --build app` for the full local deployment, with `APP_URL=http://127.0.0.1:3000`.
 Use the same local configuration and infrastructure credentials as before.
 All demo accounts use password **`Himoroki-demo-only-2026!`**; never expose this dataset or these credentials on a public deployment.
 
@@ -102,7 +102,7 @@ All demo accounts use password **`Himoroki-demo-only-2026!`**; never expose this
 Counts above apply before searching or editing; scopes overlap.
 The evaluator cannot read 16 private Assets in Private Store, despite being a system administrator.
 Mine filters immutable reporting provenance within readable Assets and grants no access.
-The evaluator can open Administration → Settings; the other accounts cannot.
+The evaluator can open Administration → Members and Settings; the other accounts cannot.
 The tools add no demo fields or relationships to the domain model.
 `pnpm test:integration` verifies seed and destructive reset on disposable Neo4j and Alarik containers only.
 
@@ -138,7 +138,11 @@ The adapter and Better Auth versions are pinned; upgrades must pass the real Neo
 
 Create an account, open Groups from the sidebar to create a Group or ask an existing member to add your member key, then report an Asset from the Assets workspace.
 The persistent header searches accessible Assets by name on Enter; ⌘K or Ctrl+K focuses search and Escape blurs it.
-The account menu provides sign-out.
+The account menu provides Profile and sign-out.
+Profile lets signed-in Users update their display name; email remains read-only.
+Administration → Members lists registered accounts and lets system administrators edit names and administrator status.
+The final administrator cannot be revoked; concurrent role changes are serialized in Neo4j.
+Profile edits retain User identity and reporting provenance, and administration grants no Asset access.
 The Assets workspace shows compact photo rows and loads more inventory as you scroll.
 All, Mine, Group access, and Public filter readable Assets; their overlapping counts reflect the current search.
 Mine means originally reported by you and never grants access.

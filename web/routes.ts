@@ -6,5 +6,7 @@ export default [
   route('assets/report', 'routes/report.tsx'),
   route('asset', 'routes/asset.tsx'),
   route('groups', 'routes/groups.tsx'),
+  route('profile', 'routes/profile.tsx'),
+  route('administration/members', 'routes/members.tsx'),
   route('administration', 'routes/administration.tsx'),
 ] satisfies RouteConfig;

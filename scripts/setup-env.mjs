@@ -13,7 +13,7 @@ if (args.length > 1 || (args.length === 1 && args[0] !== '--dev')) {
     NEO4J_URI: 'bolt://127.0.0.1:7687',
     NEO4J_USERNAME: 'neo4j',
     NEO4J_PASSWORD: secret(),
-    APP_URL: dev ? 'http://127.0.0.1:5173' : 'http://127.0.0.1:3000',
+    APP_URL: 'http://127.0.0.1:3000',
     BETTER_AUTH_SECRET: secret(),
     S3_ENDPOINT: 'http://127.0.0.1:8080',
     S3_BUCKET: 'himoroki-photos',
@@ -33,7 +33,8 @@ if (args.length > 1 || (args.length === 1 && args[0] !== '--dev')) {
     console.log('For a fresh deployment, run:');
     console.log(dev ? 'pnpm install\ndocker compose up -d --wait neo4j alarik\npnpm dev'
       : 'docker compose up -d --build --wait');
-    console.log(`Open ${values.APP_URL} after startup.`);
+    console.log(`Himoroki: ${values.APP_URL}/`);
+    console.log('Open this URL in your browser during development.');
     console.log('Existing storage volumes retain their credentials; generating a file does not rotate them.');
   } catch (error) {
     console.error(error.code === 'EEXIST'

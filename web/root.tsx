@@ -48,7 +48,7 @@ export default function App({ loaderData: { user, isAdmin }, actionData }: Route
         <p className="nav-label">Workspace</p>
         <Link to="/" aria-current={assetsActive ? 'page' : undefined} className={assetsActive ? 'active' : ''}><Icon name="assets" />Assets</Link>
         <NavLink to="/groups"><Icon name="groups" />Groups</NavLink>
-        {isAdmin && <><p className="nav-label admin-label">Administration</p><NavLink to="/administration"><Icon name="settings" />Settings</NavLink></>}
+        {isAdmin && <><p className="nav-label admin-label">Administration</p><NavLink to="/administration/members"><Icon name="members" />Members</NavLink><NavLink to="/administration" end><Icon name="settings" />Settings</NavLink></>}
       </nav>
       <p className="sidebar-note">A place for things.<br />Context that stays.</p>
     </aside>
@@ -63,7 +63,8 @@ export default function App({ loaderData: { user, isAdmin }, actionData }: Route
         {user ? <details className="account-menu" key={location.pathname}>
           <summary aria-label="Account menu"><span className="avatar" aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</span><span className="account-name">{user.name}</span><span aria-hidden="true">⌄</span></summary>
           <div className="account-popover"><strong>{user.name}</strong><p>{isAdmin ? 'System administrator' : 'Signed in'}</p>
-            <Form method="post" action="/"><button disabled={busy}>Sign out</button></Form>
+            <Link to="/profile" className="account-profile-link" aria-label="Profile"><span>Profile</span><span aria-hidden="true">›</span></Link>
+            <Form method="post" action="/"><button aria-label="Sign out" disabled={busy}>Sign out</button></Form>
           </div>
         </details> : <Link to="/signin" className="account-signin">Sign in</Link>}
       </header>
