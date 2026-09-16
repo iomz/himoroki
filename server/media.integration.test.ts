@@ -16,7 +16,11 @@ const photo = () => new File([png], 'photo.png', { type: 'image/png' });
 test('S3 media, policy and administration', { skip: !uri || !password || !process.env.S3_ENDPOINT }, async (t) => {
   const driver = neo4j.driver(uri!, neo4j.auth.basic('neo4j', password!));
   t.after(() => driver.close());
+  const legacy = driver.session();
+  await legacy.run("MERGE (s:Settings {key: 'instance'}) SET s.requirePhoto = false, s.displayTimezone = 'UTC', s.revision = 0 REMOVE s.themeId, s.accentColor");
+  await legacy.close();
   const store = await IdentityStore.open(driver);
+  assert.deepEqual(await store.settings(), { requirePhoto: false, displayTimezone: 'UTC', themeId: 'default' });
   const storage = storageFromEnv();
   await storage.check();
   const media = new MediaService(store, storage);
@@ -43,14 +47,15 @@ test('S3 media, policy and administration', { skip: !uri || !password || !proces
     method, headers: { Origin: origin, ...(authenticated ? { Cookie: cookie } : {}), ...(typeof body === 'string' ? { 'Content-Type': 'application/json' } : {}) }, body,
   });
 
-  await t.test('only explicitly granted administrator can change two instance settings', async () => {
-    const change = JSON.stringify({ requirePhoto: true, displayTimezone: 'Asia/Tokyo' });
+  await t.test('only explicitly granted administrator can change instance settings', async () => {
+    const change = JSON.stringify({ requirePhoto: true, displayTimezone: 'Asia/Tokyo', themeId: 'mono-blue' });
     assert.equal((await request('/settings', 'PATCH', change)).status, 404);
     assert.equal((await request('/settings', 'PATCH', change, false)).status, 401);
     await query('MATCH (u:User {key: $key}) SET u.isAdmin = true', { key: user.key });
     assert.equal((await request('/settings', 'PATCH', change)).status, 200);
-    assert.deepEqual(await store.settings(), { requirePhoto: true, displayTimezone: 'Asia/Tokyo' });
-    assert.equal((await request('/settings', 'PATCH', JSON.stringify({ requirePhoto: false, displayTimezone: 'unknown' }))).status, 400);
+    assert.deepEqual(await store.settings(), { requirePhoto: true, displayTimezone: 'Asia/Tokyo', themeId: 'mono-blue' });
+    assert.equal((await request('/settings', 'PATCH', JSON.stringify({ requirePhoto: false, displayTimezone: 'unknown', themeId: 'default' }))).status, 400);
+    assert.equal((await request('/settings', 'PATCH', JSON.stringify({ requirePhoto: false, displayTimezone: 'UTC', themeId: 'custom' }))).status, 400);
   });
 
   await t.test('required photo enforced on JSON and multipart reports; successful bytes and metadata commit together', async () => {
@@ -101,10 +106,10 @@ test('S3 media, policy and administration', { skip: !uri || !password || !proces
   });
 
   await t.test('optional policy accepts photo-free reports and does not affect existing Assets', async () => {
-    await store.updateSettings(user.key, { requirePhoto: false, displayTimezone: 'UTC' });
+    await store.updateSettings(user.key, { requirePhoto: false, displayTimezone: 'UTC', themeId: 'default' });
     const asset = await media.report({ name: 'Optional', identifiers: [{ ...id, serial: 'optional' }] }, context);
     assert.deepEqual(asset.photos, []);
-    await store.updateSettings(user.key, { requirePhoto: true, displayTimezone: 'UTC' });
+    await store.updateSettings(user.key, { requirePhoto: true, displayTimezone: 'UTC', themeId: 'default' });
     assert.ok(await store.updateAsset(asset.identifier, { name: 'Still editable' }, user.key));
   });
 

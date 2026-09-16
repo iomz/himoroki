@@ -4,8 +4,15 @@ import { api, authClient, unwrap } from './api';
 import type { Route } from './+types/root';
 import './style.css';
 import { Icon } from './icon';
+import { themeById } from './themes';
+import { paletteVariables } from './themes/variables';
 
-export async function clientLoader() { return unwrap(await api.me.$get()); }
+export async function clientLoader() {
+  const [account, { settings }] = await Promise.all([
+    unwrap(await api.me.$get()), unwrap(await api.settings.$get()),
+  ]);
+  return { ...account, themeId: settings.themeId };
+}
 export async function clientAction() {
   const result = await authClient.signOut();
   if (result.error) return { error: result.error.message ?? 'Sign-out failed' };
@@ -19,7 +26,7 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 export function HydrateFallback() { return <main className="loading">Loading Himoroki…</main>; }
 export { WorkspaceError as ErrorBoundary } from './route-error';
-export default function App({ loaderData: { user, isAdmin }, actionData }: Route.ComponentProps) {
+export default function App({ loaderData: { user, isAdmin, themeId }, actionData }: Route.ComponentProps) {
   const location = useLocation();
   const busy = useNavigation().state !== 'idle';
   const [menuOpen, setMenuOpen] = useState(false);
@@ -36,7 +43,9 @@ export default function App({ loaderData: { user, isAdmin }, actionData }: Route
     return () => window.removeEventListener('keydown', shortcut);
   }, [user]);
   const assetsActive = location.pathname === '/' || location.pathname === '/asset' || location.pathname.startsWith('/assets/');
-  return <div className="app-shell">
+  const theme = themeById(themeId);
+  return <div className="app-shell" data-theme={theme.id} data-color-scheme="light"
+    style={{ ...paletteVariables(theme.light), colorScheme: 'light' }}>
     <a className="skip-link" href="#workspace">Skip to content</a>
     <aside className="sidebar">
       <Link to="/" className="brand" onClick={() => setMenuOpen(false)} aria-label="Himoroki home">

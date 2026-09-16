@@ -80,7 +80,9 @@ export class IdentityStore {
     try {
       // Fail closed if constraints cannot be installed, including on dirty data.
       for (const statement of constraints) await session.run(statement);
-      await session.run("MERGE (s:Settings {key: 'instance'}) ON CREATE SET s.requirePhoto = false, s.displayTimezone = 'UTC', s.revision = 0");
+      await session.run(`MERGE (s:Settings {key: 'instance'})
+        ON CREATE SET s.requirePhoto = false, s.displayTimezone = 'UTC', s.revision = 0
+        SET s.themeId = coalesce(s.themeId, 'default') REMOVE s.accentColor`);
       const result = await session.run('SHOW CONSTRAINTS YIELD type, labelsOrTypes, properties RETURN *');
       for (const [label, properties] of [
         ['Settings', ['key']], ['Media', ['key']], ['User', ['key']], ['Group', ['key']], ['Owner', ['key']],
@@ -317,7 +319,7 @@ export class IdentityStore {
   }
 
   async settings(): Promise<Settings> {
-    const result = await this.write((tx) => tx.run("MATCH (s:Settings {key: 'instance'}) RETURN s { .requirePhoto, .displayTimezone } AS settings"));
+    const result = await this.write((tx) => tx.run("MATCH (s:Settings {key: 'instance'}) RETURN s { .requirePhoto, .displayTimezone, .themeId } AS settings"));
     return result.records[0].get('settings');
   }
 
@@ -330,7 +332,8 @@ export class IdentityStore {
     const settings = validateSettings(value);
     return this.write(async (tx) => {
       const result = await tx.run(`MATCH (:User {key: $actorKey, isAdmin: true}), (s:Settings {key: 'instance'})
-        SET s.revision = s.revision + 1, s.requirePhoto = $settings.requirePhoto, s.displayTimezone = $settings.displayTimezone
+        SET s.revision = s.revision + 1, s.requirePhoto = $settings.requirePhoto,
+          s.displayTimezone = $settings.displayTimezone, s.themeId = $settings.themeId
         RETURN s.key`, { actorKey, settings });
       if (!result.records.length) throw new ReferenceError('Administrator access required');
       return settings;

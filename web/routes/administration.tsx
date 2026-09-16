@@ -1,6 +1,8 @@
 import { Form, redirect, useNavigation } from 'react-router';
 import { api, unwrap } from '../api';
+import { ThemeSelector } from '../theme-selector';
 import { TimezonePicker } from '../timezone-picker';
+import type { ThemeId } from '../../shared/theme';
 import type { Route } from './+types/administration';
 
 export async function clientLoader() {
@@ -14,6 +16,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   try {
     await unwrap(await api.settings.$patch({ json: {
       requirePhoto: data.get('requirePhoto') === 'on', displayTimezone: String(data.get('displayTimezone') ?? ''),
+      themeId: String(data.get('themeId') ?? '') as ThemeId,
     } }));
     return { saved: true, error: null };
   } catch (error) { return { saved: false, error: error instanceof Error ? error.message : 'Settings update failed' }; }
@@ -21,18 +24,19 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
 export default function Administration({ loaderData: { settings }, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== 'idle';
   return <>
-    <div className="page-heading"><div><p className="eyebrow">Administration</p><h1>Instance settings</h1><p>Reporting policy and time presentation for this deployment.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">Administration</p><h1>Instance settings</h1><p>Reporting policy, time presentation, and theme for this deployment.</p></div></div>
     {actionData?.error && <p role="alert">{actionData.error}</p>}
     {actionData?.saved && <p role="status" className="notice">Settings saved.</p>}
-    <section className="panel form-panel"><h2>Reporting and display</h2>
+    <section className="panel form-panel"><h2>Reporting, display, and appearance</h2>
         <Form method="post"><fieldset disabled={busy}>
           <input type="hidden" name="intent" value="settings" />
           <label className="checkbox"><input type="checkbox" name="requirePhoto" defaultChecked={settings.requirePhoto} />Require photo when reporting an Asset</label>
           <TimezonePicker name="displayTimezone" value={settings.displayTimezone} />
+          <ThemeSelector name="themeId" value={settings.themeId} />
           <button>Save settings</button>
         </fieldset></Form>
 
-      <p className="hint">The photo requirement applies to new reports. Timestamps stay stored as absolute instants.</p>
+      <p className="hint">The photo requirement applies to new reports. Timestamps stay stored as absolute instants. Theme applies instance-wide.</p>
     </section>
   </>;
 }

@@ -9,9 +9,12 @@ test('display timezone changes presentation without changing the absolute instan
   assert.match(displayInstant(instant, 'Asia/Tokyo'), /2 Jan 2026.*08:30/);
   assert.match(displayInstant('2026-07-01T12:00:00Z', 'America/New_York'), /08:00/);
   assert.equal(instant, '2026-01-01T23:30:00.000Z');
-  assert.throws(() => validateSettings({ requirePhoto: true, displayTimezone: 'not-a-zone' }));
-  assert.throws(() => validateSettings({ requirePhoto: 'true', displayTimezone: 'UTC' }));
-  assert.throws(() => validateSettings({ requirePhoto: false, displayTimezone: 'UTC', requiredFields: [] }));
+  assert.deepEqual(validateSettings({ requirePhoto: false, displayTimezone: 'UTC', themeId: 'raycast' }),
+    { requirePhoto: false, displayTimezone: 'UTC', themeId: 'raycast' });
+  assert.throws(() => validateSettings({ requirePhoto: true, displayTimezone: 'not-a-zone', themeId: 'default' }));
+  assert.throws(() => validateSettings({ requirePhoto: 'true', displayTimezone: 'UTC', themeId: 'default' }));
+  assert.throws(() => validateSettings({ requirePhoto: false, displayTimezone: 'UTC', themeId: 'custom' }));
+  assert.throws(() => validateSettings({ requirePhoto: false, displayTimezone: 'UTC', themeId: 'default', requiredFields: [] }));
 });
 
 test('photo validation rejects empty, oversized, active content and mismatched MIME', async () => {

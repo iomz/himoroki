@@ -182,8 +182,8 @@ pnpm admin:grant person@example.com
 
 For the containerized application, use `docker compose exec app node dist/server/grant-admin.js person@example.com`.
 Reload the application and open Settings under Administration in the sidebar to see Instance settings.
-Administration permits changing only the photo-on-report policy and the instance display timezone; it grants no Asset access.
-The defaults are optional photos and UTC display.
+Administration permits changing only the photo-on-report policy, instance display timezone, and built-in instance theme; it grants no Asset access.
+The defaults are optional photos, UTC display, and the `default` theme.
 The photo requirement applies to new reports, including direct API requests, and requires a photo in the same reporting submission.
 Existing Assets remain editable without a photo when the policy changes.
 All stored timestamps remain absolute instants; the configured timezone only affects presentation.
@@ -195,7 +195,7 @@ Expired or failed uploads are retried on startup and every minute; attached phot
 If storage is unavailable, cleanup waits for recovery and the pending photo is never exposed as an Asset photo.
 
 To evaluate an empty deployment, sign up, create a Group or join through an existing member, report an Asset with an existing identifier, upload/view a photo, edit its name, switch public/private visibility, and find it again by name.
-Enable the photo requirement and select a display timezone from Instance settings to exercise deployment policy.
+Enable the photo requirement, select a display timezone, and change the built-in theme from Instance settings to exercise deployment policy and appearance.
 
 ## Tests
 
@@ -206,7 +206,7 @@ pnpm test:integration
 ```
 
 The integration runner creates a disposable Neo4j container per suite and an Alarik container for media tests with a random password and localhost port, then stops it after testing.
-Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, immutable provenance after membership removal, signed S3 operations, photo authorization, policy enforcement, timezone presentation, and upload-failure cleanup.
+Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, immutable provenance after membership removal, signed S3 operations, photo authorization, policy enforcement, timezone presentation, theme persistence, and upload-failure cleanup.
 It never uses the application `.env` or an existing database.
 `NEO4J_TEST_IMAGE` may select a locally cached Neo4j 5 image; the default matches Compose's `neo4j:5-community`.
 

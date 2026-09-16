@@ -17,7 +17,7 @@ Preserve the README naming story at the bottom of README.
 Use Hono for server behavior, React Router v7 Framework Mode for UI, and Neo4j for master data.
 Keep one package and ordinary files until a concrete need requires more structure.
 Keep object bytes behind the small S3 storage interface and photo metadata in Neo4j.
-Keep administrative settings limited to photo-on-report policy and display timezone; store timestamps as absolute instants.
+Keep administrative settings limited to photo-on-report policy, display timezone, and built-in instance theme; store timestamps as absolute instants.
 System administration must not grant Asset access.
 Run `pnpm typecheck`, `pnpm test`, and `pnpm build` for application changes.
 Do not commit or push without explicit authorization.
