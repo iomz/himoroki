@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { filterTimezones } from './timezones';
 
-export function TimezonePicker({ name, value }: { name: string; value: string }) {
+export function TimezonePicker({ name, value, disabled = false, onChange }: {
+  name: string; value: string; disabled?: boolean; onChange?(value: string): void;
+}) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -30,6 +32,7 @@ export function TimezonePicker({ name, value }: { name: string; value: string })
 
   function choose(zone: string) {
     setSelected(zone);
+    if (zone !== selected) onChange?.(zone);
     setQuery('');
     setOpen(false);
     trigger.current?.focus();
@@ -45,6 +48,7 @@ export function TimezonePicker({ name, value }: { name: string; value: string })
     <label id={`${id}-label`} htmlFor={`${id}-trigger`}>Display timezone</label>
     <input type="hidden" name={name} value={selected} readOnly />
     <button id={`${id}-trigger`} ref={trigger} type="button" className="timezone-trigger"
+      disabled={disabled}
       aria-labelledby={`${id}-label ${id}-value`} aria-controls={listId} aria-expanded={open} aria-haspopup="listbox"
       onClick={() => open ? setOpen(false) : openPicker()}>
       <span id={`${id}-value`}>{selected}</span><span aria-hidden="true">⌄</span>

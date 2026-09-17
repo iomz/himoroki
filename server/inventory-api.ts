@@ -35,7 +35,7 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       c.set('user', session && key ? { key, name: session.user.name } : null);
       await next();
     })
-    .get('/me', async (c) => c.json({ user: c.get('user'), isAdmin: await store.isAdmin(c.get('user')?.key ?? null) }))
+    .get('/me', async (c) => c.json({ user: c.get('user'), ...await store.accountState(c.get('user')?.key ?? null) }))
     .get('/profile', async (c) => c.json({ member: await store.profile(actor(c.get('user'))) }))
     .patch('/profile', validator('json', (value) => record(value, ['name']) as { name: string }), async (c) => {
       const key = actor(c.get('user'));
@@ -43,6 +43,8 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       await auth.api.updateUser({ headers: c.req.raw.headers, body: { name } });
       return c.json({ member: await store.profile(key) });
     })
+    .patch('/profile/appearance', async (c) =>
+      c.json({ appearance: await store.updateAppearance(actor(c.get('user')), await c.req.json()) }))
     .get('/members', async (c) => c.json({ members: await store.members(actor(c.get('user'))) }))
     .patch('/members/:key', validator('json', (value) => record(value, ['name', 'isAdmin']) as { name: string; isAdmin: boolean }), async (c) => c.json({ member: await store.updateMember(actor(c.get('user')), c.req.param('key'), c.req.valid('json')) }))
     .get('/settings', async (c) => c.json({ settings: await store.settings() }))

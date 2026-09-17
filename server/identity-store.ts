@@ -7,12 +7,14 @@ import {
   canonicalClaims, canonicalIdentifier, record, requiredText, ValidationError,
   type AssetIdentifier, type IdentifierClaim,
 } from './identity.js';
+import { isAppearancePreference, type AppearancePreference } from '../shared/appearance.js';
 
 export class DuplicateIdentityError extends Error {}
 export class ReferenceError extends Error {}
 export class AdministrationError extends Error {}
 export class LastAdministratorError extends Error {}
 export type Member = { key: string; name: string; email: string; isAdmin: boolean; createdAt: string | null };
+export type AccountState = { isAdmin: boolean; appearance: AppearancePreference };
 const memberProjection = `u { .key, .name, .email, isAdmin: coalesce(u.isAdmin, false), createdAt: toString(u.createdAt) }`;
 
 // Entity keys are internal references. Assets have no generated application ID.
@@ -292,6 +294,25 @@ export class IdentityStore {
     return result.records[0].get('member');
   }
 
+  async accountState(actorKey: string | null): Promise<AccountState> {
+    if (!actorKey) return { isAdmin: false, appearance: 'system' };
+    const result = await this.write((tx) => tx.run(`MATCH (u:User {key: $actorKey})
+      RETURN u.isAdmin = true AS isAdmin, coalesce(u.appearance, 'system') AS appearance`, { actorKey }));
+    if (!result.records.length) throw new ReferenceError('User not found');
+    const appearance = result.records[0].get('appearance');
+    if (!isAppearancePreference(appearance)) throw new Error('Stored User appearance is invalid');
+    return { isAdmin: result.records[0].get('isAdmin') === true, appearance };
+  }
+
+  async updateAppearance(actorKey: string, value: unknown): Promise<AppearancePreference> {
+    const input = record(value, ['appearance']);
+    if (!isAppearancePreference(input.appearance)) throw new ValidationError('Supported appearance is required');
+    const result = await this.write((tx) => tx.run(`MATCH (u:User {key: $actorKey}) WHERE u.id IS NOT NULL
+      SET u.appearance = $appearance RETURN u.appearance AS appearance`, { actorKey, appearance: input.appearance }));
+    if (!result.records.length) throw new ReferenceError('User not found');
+    return result.records[0].get('appearance');
+  }
+
   async updateMember(actorKey: string, targetKey: string, value: unknown): Promise<Member> {
     const input = record(value, ['name', 'isAdmin']);
     const name = requiredText(input.name, 'name');
@@ -321,11 +342,6 @@ export class IdentityStore {
   async settings(): Promise<Settings> {
     const result = await this.write((tx) => tx.run("MATCH (s:Settings {key: 'instance'}) RETURN s { .requirePhoto, .displayTimezone, .themeId } AS settings"));
     return result.records[0].get('settings');
-  }
-
-  async isAdmin(actorKey: string | null): Promise<boolean> {
-    const result = await this.write((tx) => tx.run('MATCH (u:User {key: $actorKey}) RETURN u.isAdmin = true AS admin', { actorKey }));
-    return result.records[0]?.get('admin') === true;
   }
 
   async updateSettings(actorKey: string, value: unknown): Promise<Settings> {

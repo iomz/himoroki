@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { themeIds } from '../shared/theme.js';
 import { builtInThemes } from '../web/themes/index.js';
+import { themeStylesheet } from '../web/themes/variables.js';
 
 function luminance(color: string): number {
   assert.match(color, /^#[0-9a-f]{6}$/i);
@@ -34,4 +35,13 @@ test('built-in themes provide complete paired palettes with readable semantic co
     }
     assert.ok(contrast(palette.focus, palette.surface) >= 3, `${theme.id} ${mode} focus contrast`);
   }
+});
+
+test('generated theme stylesheet covers every built-in light and dark palette', () => {
+  const css = themeStylesheet(builtInThemes);
+  for (const id of themeIds) for (const mode of ['light', 'dark']) {
+    assert.match(css, new RegExp(`data-theme="${id}"\\]\\[data-color-scheme="${mode}"`));
+  }
+  assert.equal((css.match(/--color-canvas:/g) ?? []).length, themeIds.length * 2);
+  assert.equal((css.match(/--color-danger-text:/g) ?? []).length, themeIds.length * 2);
 });

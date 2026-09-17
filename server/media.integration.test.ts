@@ -98,7 +98,7 @@ test('S3 media, policy and administration', { skip: !uri || !password || !proces
     await store.updateAsset(id, { isPublic: false }, user.key);
     assert.equal((await request(path, 'GET', undefined, false)).status, 404);
     await store.leaveGroup(user.key, group.key);
-    assert.equal(await store.isAdmin(user.key), true);
+    assert.equal((await store.accountState(user.key)).isAdmin, true);
     assert.equal((await request(path)).status, 404); // administrator is not an Asset ACL
     await assert.rejects(media.add(id, user.key, photo()));
     assert.deepEqual((await store.getAsset(id, member.key))!.reportedBy, asset.reportedBy);

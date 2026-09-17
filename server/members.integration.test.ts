@@ -68,6 +68,25 @@ test('member administration and shared profiles', { skip: !uri || !password }, a
     assert.equal(updated?.reportedAt, asset.reportedAt);
     assert.equal((await (await other('/profile')).json()).member.email, 'member1@example.com');
   });
+  await t.test('appearance is self-service, isolated per User, and anonymous after sign-out', async () => {
+    assert.equal((await (await admin('/me')).json()).appearance, 'system');
+    assert.equal((await (await other('/me')).json()).appearance, 'system');
+    assert.equal((await other('/profile/appearance', 'PATCH', { appearance: 'light' })).status, 200);
+    assert.equal((await admin('/profile/appearance', 'PATCH', { appearance: 'dark' })).status, 200);
+    assert.equal((await (await other('/me')).json()).appearance, 'light');
+    assert.equal((await (await admin('/me')).json()).appearance, 'dark');
+    assert.equal((await other('/profile/appearance', 'PATCH', { appearance: 'auto' })).status, 400);
+    assert.equal((await other('/profile/appearance', 'PATCH', { appearance: 'dark', themeId: 'raycast' })).status, 400);
+    assert.equal((await admin('/members/' + keys[1], 'PATCH', { name: 'Bad', isAdmin: false, appearance: 'dark' })).status, 400);
+    assert.equal((await other('/auth/sign-out', 'POST', {})).status, 200);
+    const signedOut = await (await other('/me')).json();
+    assert.equal(signedOut.user, null);
+    assert.equal(signedOut.appearance, 'system');
+    assert.equal((await other('/auth/sign-in/email', 'POST', {
+      email: 'member1@example.com', password: 'test-password-12345',
+    })).status, 200);
+    assert.equal((await (await other('/me')).json()).appearance, 'light');
+  });
   await t.test('grant/revoke preserves Asset authorization; final admin protection is atomic', async () => {
     const path = '/members/' + keys[1];
     assert.equal((await admin(path, 'PATCH', { name: 'Second admin', isAdmin: true })).status, 200);

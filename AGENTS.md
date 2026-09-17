@@ -12,6 +12,10 @@ Preserve the README naming story at the bottom of README.
 - Internal database keys remain implementation details.
 - GS1 Digital Link, resolver semantics, and identifier issuance remain deferred.
 
+# Design principles
+
+Settings persistence: Simple discrete preferences persist on selection/change. Complex multi-field configuration uses explicit actions.
+
 # Implementation
 
 Use Hono for server behavior, React Router v7 Framework Mode for UI, and Neo4j for master data.

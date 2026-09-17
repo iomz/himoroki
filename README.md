@@ -139,7 +139,8 @@ The adapter and Better Auth versions are pinned; upgrades must pass the real Neo
 Create an account, open Groups from the sidebar to create a Group or ask an existing member to add your member key, then report an Asset from the Assets workspace.
 The persistent header searches accessible Assets by name on Enter; ⌘K or Ctrl+K focuses search and Escape blurs it.
 The account menu provides Profile and sign-out.
-Profile lets signed-in Users update their display name; email remains read-only.
+Profile lets signed-in Users update their display name and choose System, Light, or Dark appearance; email remains read-only.
+Appearance applies the selected instance theme's corresponding palette only to that User, and System follows live browser or operating-system preference changes.
 Administration → Members lists registered accounts and lets system administrators edit names and administrator status.
 The final administrator cannot be revoked; concurrent role changes are serialized in Neo4j.
 Profile edits retain User identity and reporting provenance, and administration grants no Asset access.

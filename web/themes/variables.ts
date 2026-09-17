@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react';
-import type { ThemePalette } from './types';
+import type { ThemeDefinition, ThemePalette } from './types';
 
-export function paletteVariables(palette: ThemePalette): CSSProperties {
-  return {
+export function paletteVariableEntries(palette: ThemePalette): [string, string][] {
+  return Object.entries({
     '--color-canvas': palette.canvas,
     '--color-surface': palette.surface,
     '--color-surface-muted': palette.surfaceMuted,
@@ -32,5 +32,17 @@ export function paletteVariables(palette: ThemePalette): CSSProperties {
     '--color-success-text': palette.successText,
     '--color-danger-surface': palette.dangerSurface,
     '--color-danger-text': palette.dangerText,
-  } as CSSProperties;
+  });
+}
+
+export function paletteVariables(palette: ThemePalette): CSSProperties {
+  return Object.fromEntries(paletteVariableEntries(palette)) as CSSProperties;
+}
+
+export function themeStylesheet(themes: readonly ThemeDefinition[]): string {
+  return themes.flatMap((theme) => (['light', 'dark'] as const).map((mode) => {
+    const declarations = paletteVariableEntries(theme[mode]).map(([name, value]) => `${name}:${value}`).join(';');
+    const selector = `[data-theme="${theme.id}"][data-color-scheme="${mode}"]`;
+    return `:root${selector},.app-shell${selector}{color-scheme:${mode};${declarations}}`;
+  })).join('');
 }

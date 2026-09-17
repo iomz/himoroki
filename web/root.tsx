@@ -1,11 +1,13 @@
 import { Form, Link, Links, Meta, NavLink, Outlet, Scripts, ScrollRestoration, redirect, useLocation, useNavigation } from 'react-router';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, authClient, unwrap } from './api';
 import type { Route } from './+types/root';
 import './style.css';
 import { Icon } from './icon';
-import { themeById } from './themes';
-import { paletteVariables } from './themes/variables';
+import { builtInThemes, themeById } from './themes';
+import { themeStylesheet } from './themes/variables';
+import { applyDocumentTheme, cacheInstanceTheme, themeBootScript, useResolvedAppearance } from './appearance';
+import { ThemeRuntimeContext } from './theme-runtime';
 
 export async function clientLoader() {
   const [account, { settings }] = await Promise.all([
@@ -19,17 +21,23 @@ export async function clientAction() {
   return redirect('/signin');
 }
 export function Layout({ children }: { children: ReactNode }) {
-  return <html lang="en"><head>
+  return <html lang="en" suppressHydrationWarning><head>
     <meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="data:," /><title>Himoroki</title><Meta /><Links />
+    <link rel="icon" href="data:," /><title>Himoroki</title><Meta />
+    <style id="himoroki-theme-palettes">{themeStylesheet(builtInThemes)}</style>
+    <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} /><Links />
   </head><body>{children}<ScrollRestoration /><Scripts /></body></html>;
 }
 export function HydrateFallback() { return <main className="loading">Loading Himoroki…</main>; }
 export { WorkspaceError as ErrorBoundary } from './route-error';
-export default function App({ loaderData: { user, isAdmin, themeId }, actionData }: Route.ComponentProps) {
+export default function App({ loaderData, actionData }: Route.ComponentProps) {
+  const { user, isAdmin } = loaderData;
   const location = useLocation();
   const busy = useNavigation().state !== 'idle';
   const [menuOpen, setMenuOpen] = useState(false);
+  const [themeId, setThemeId] = useState(loaderData.themeId);
+  const [appearance, setAppearance] = useState(loaderData.appearance);
+  const [colorSchemePreview, setColorSchemePreview] = useState<'light' | 'dark' | null>(null);
   const q = new URLSearchParams(location.search).get('q') ?? '';
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -42,10 +50,17 @@ export default function App({ loaderData: { user, isAdmin, themeId }, actionData
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
   }, [user]);
+  useEffect(() => setThemeId(loaderData.themeId), [loaderData.themeId]);
+  useEffect(() => setAppearance(loaderData.appearance), [loaderData.appearance]);
   const assetsActive = location.pathname === '/' || location.pathname === '/asset' || location.pathname.startsWith('/assets/');
   const theme = themeById(themeId);
-  return <div className="app-shell" data-theme={theme.id} data-color-scheme="light"
-    style={{ ...paletteVariables(theme.light), colorScheme: 'light' }}>
+  const resolvedAppearance = useResolvedAppearance(appearance);
+  const colorScheme = colorSchemePreview ?? resolvedAppearance;
+  useLayoutEffect(() => applyDocumentTheme(theme.id, colorScheme), [theme.id, colorScheme]);
+  useEffect(() => cacheInstanceTheme(theme.id), [theme.id]);
+  return <ThemeRuntimeContext.Provider value={{ themeId, setThemeId, appearance, setAppearance,
+    colorScheme, setColorSchemePreview }}>
+    <div className="app-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
     <a className="skip-link" href="#workspace">Skip to content</a>
     <aside className="sidebar">
       <Link to="/" className="brand" onClick={() => setMenuOpen(false)} aria-label="Himoroki home">
@@ -81,5 +96,6 @@ export default function App({ loaderData: { user, isAdmin, themeId }, actionData
         {actionData?.error && <p role="alert">{actionData.error}</p>}<Outlet />
       </main>
     </div>
-  </div>;
+    </div>
+  </ThemeRuntimeContext.Provider>;
 }
