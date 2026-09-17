@@ -8,6 +8,8 @@ import { createApp } from './app.js';
 import { createAuth } from './auth.js';
 import { IdentityStore } from './identity-store.js';
 import { createInventoryApi } from './inventory-api.js';
+import { MailService } from './mail.js';
+import { MasterKeyManager } from './secrets.js';
 
 const password = process.env.NEO4J_PASSWORD;
 if (!password) throw new Error('NEO4J_PASSWORD is required');
@@ -28,6 +30,11 @@ const authSecret = process.env.BETTER_AUTH_SECRET;
 if (!appURL || !authSecret) throw new Error('APP_URL and BETTER_AUTH_SECRET are required');
 const applicationOrigin = new URL(appURL).origin;
 const store = await IdentityStore.open(driver);
+const masterKey = await MasterKeyManager.open(await store.hasEncryptedSecrets());
+if (masterKey.state !== 'ready') {
+  console.warn(`Mail credentials unavailable: instance master key is ${masterKey.state}. Restore it or use the explicit Administration reset.`);
+}
+const mail = new MailService(store, masterKey);
 const storage = storageFromEnv();
 await storage.check();
 const media = new MediaService(store, storage);
@@ -42,7 +49,7 @@ app.use('/api/*', async (c, next) => {
   if (address) c.req.raw.headers.set('x-himoroki-client-ip', address);
   await next();
 });
-app.route('/api', createInventoryApi(store, auth, applicationOrigin, media));
+app.route('/api', createInventoryApi(store, auth, applicationOrigin, media, mail));
 
 // Unknown API paths must never fall through to the SPA.
 app.all('/api', (c) => c.json({ error: 'Not found' }, 404));

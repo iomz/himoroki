@@ -29,6 +29,7 @@
     "hono": "^4.13.7",
     "neo4j-better-auth": "0.1.1",
     "neo4j-driver": "^6.2.0",
+    "nodemailer": "^10.0.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "^7.18.3"
@@ -36,9 +37,12 @@
   "devDependencies": {
     "@react-router/dev": "^7.18.3",
     "@types/node": "^24.13.4",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/smtp-server": "^3.5.13",
     "concurrently": "^10.0.5",
+    "smtp-server": "^3.19.13",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vite": "^7.3.6"

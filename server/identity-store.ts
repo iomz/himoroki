@@ -8,6 +8,8 @@ import {
   type AssetIdentifier, type IdentifierClaim,
 } from './identity.js';
 import { isAppearancePreference, type AppearancePreference } from '../shared/appearance.js';
+import { MailRevisionConflictError, type MailVerificationStatus, type PersistedMailSettings,
+  type StoredMailConfiguration } from './mail.js';
 
 export class DuplicateIdentityError extends Error {}
 export class ReferenceError extends Error {}
@@ -41,6 +43,7 @@ export type AssetChanges = { name?: string; ownerKey?: string | null; isPublic?:
 
 const constraints = [
   'CREATE CONSTRAINT settings_key IF NOT EXISTS FOR (n:Settings) REQUIRE n.key IS UNIQUE',
+  'CREATE CONSTRAINT mail_configuration_key IF NOT EXISTS FOR (n:MailConfiguration) REQUIRE n.key IS UNIQUE',
   'CREATE CONSTRAINT media_key IF NOT EXISTS FOR (n:Media) REQUIRE n.key IS UNIQUE',
   'CREATE CONSTRAINT user_key IF NOT EXISTS FOR (n:User) REQUIRE n.key IS UNIQUE',
   'CREATE CONSTRAINT group_key IF NOT EXISTS FOR (n:Group) REQUIRE n.key IS UNIQUE',
@@ -85,9 +88,12 @@ export class IdentityStore {
       await session.run(`MERGE (s:Settings {key: 'instance'})
         ON CREATE SET s.requirePhoto = false, s.displayTimezone = 'UTC', s.revision = 0
         SET s.themeId = coalesce(s.themeId, 'default') REMOVE s.accentColor`);
+      await session.run(`MERGE (m:MailConfiguration {key: 'instance'})
+        ON CREATE SET m.enabled = false, m.transport = 'smtp', m.revision = 0
+        SET m.verificationStatus = coalesce(m.verificationStatus, 'not-verified')`);
       const result = await session.run('SHOW CONSTRAINTS YIELD type, labelsOrTypes, properties RETURN *');
       for (const [label, properties] of [
-        ['Settings', ['key']], ['Media', ['key']], ['User', ['key']], ['Group', ['key']], ['Owner', ['key']],
+        ['Settings', ['key']], ['MailConfiguration', ['key']], ['Media', ['key']], ['User', ['key']], ['Group', ['key']], ['Owner', ['key']],
         ['Identifier', ['scheme', 'value', 'serial']],
       ] as const) {
         if (!result.records.some((row) => row.get('type') === 'UNIQUENESS'
@@ -353,6 +359,77 @@ export class IdentityStore {
         RETURN s.key`, { actorKey, settings });
       if (!result.records.length) throw new ReferenceError('Administrator access required');
       return settings;
+    });
+  }
+
+  private static mailProjection = `m { revision: toFloat(m.revision), .enabled, .transport, .smtpHost,
+    smtpPort: toFloat(m.smtpPort), .smtpSecurity, .smtpUsername, .smtpPasswordEnvelope,
+    .senderAddress, .senderName, verificationStatus: coalesce(m.verificationStatus, 'not-verified'),
+    verificationObservedAt: m.verificationObservedAt }`;
+
+  async hasEncryptedSecrets(): Promise<boolean> {
+    const session = this.driver.session();
+    try {
+      const result = await session.executeRead((tx) => tx.run(
+        "MATCH (m:MailConfiguration {key: 'instance'}) RETURN m.smtpPasswordEnvelope IS NOT NULL AS present"));
+      return result.records[0]?.get('present') === true;
+    } finally { await session.close(); }
+  }
+
+  async readMailConfiguration(actorKey: string): Promise<StoredMailConfiguration> {
+    const session = this.driver.session();
+    try {
+      const result = await session.executeRead((tx) => tx.run(`MATCH (:User {key: $actorKey, isAdmin: true})
+        MATCH (m:MailConfiguration {key: 'instance'}) RETURN ${IdentityStore.mailProjection} AS configuration`, { actorKey }));
+      if (!result.records.length) throw new AdministrationError('Administrator access required');
+      return result.records[0].get('configuration');
+    } finally { await session.close(); }
+  }
+
+  async effectiveMailConfiguration(): Promise<StoredMailConfiguration> {
+    const session = this.driver.session();
+    try {
+      const result = await session.executeRead((tx) => tx.run(
+        `MATCH (m:MailConfiguration {key: 'instance'}) RETURN ${IdentityStore.mailProjection} AS configuration`));
+      return result.records[0].get('configuration');
+    } finally { await session.close(); }
+  }
+
+  async replaceMailConfiguration(actorKey: string, expectedRevision: number,
+    configuration: PersistedMailSettings): Promise<StoredMailConfiguration> {
+    return this.write(async (tx) => {
+      const allowed = await tx.run('MATCH (u:User {key: $actorKey, isAdmin: true}) RETURN u.key', { actorKey });
+      if (!allowed.records.length) throw new AdministrationError('Administrator access required');
+      const result = await tx.run(`MATCH (m:MailConfiguration {key: 'instance', revision: $expectedRevision})
+        SET m += $configuration, m.revision = m.revision + 1
+        SET m.verificationStatus = 'not-verified'
+        REMOVE m.verificationObservedAt
+        RETURN ${IdentityStore.mailProjection} AS configuration`, { expectedRevision, configuration });
+      if (!result.records.length) throw new MailRevisionConflictError('Mail configuration changed; reload and try again');
+      return result.records[0].get('configuration');
+    });
+  }
+
+  async recordMailVerification(expectedRevision: number, status: MailVerificationStatus,
+    observedAt: string): Promise<StoredMailConfiguration | null> {
+    return this.write(async (tx) => {
+      const result = await tx.run(`MATCH (m:MailConfiguration {key: 'instance', revision: $expectedRevision})
+        SET m.verificationStatus = $status, m.verificationObservedAt = $observedAt
+        RETURN ${IdentityStore.mailProjection} AS configuration`, { expectedRevision, status, observedAt });
+      return result.records[0]?.get('configuration') ?? null;
+    });
+  }
+
+  async resetEncryptedSecrets(actorKey: string, expectedRevision: number): Promise<StoredMailConfiguration> {
+    return this.write(async (tx) => {
+      const allowed = await tx.run('MATCH (u:User {key: $actorKey, isAdmin: true}) RETURN u.key', { actorKey });
+      if (!allowed.records.length) throw new AdministrationError('Administrator access required');
+      const result = await tx.run(`MATCH (m:MailConfiguration {key: 'instance', revision: $expectedRevision})
+        SET m.enabled = false, m.revision = m.revision + 1, m.verificationStatus = 'not-verified'
+        REMOVE m.smtpUsername, m.smtpPasswordEnvelope, m.verificationObservedAt
+        RETURN ${IdentityStore.mailProjection} AS configuration`, { expectedRevision });
+      if (!result.records.length) throw new MailRevisionConflictError('Mail configuration changed; reload and try again');
+      return result.records[0].get('configuration');
     });
   }
 

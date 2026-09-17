@@ -183,11 +183,32 @@ pnpm admin:grant person@example.com
 
 For the containerized application, use `docker compose exec app node dist/server/grant-admin.js person@example.com`.
 Reload the application and open Settings under Administration in the sidebar to see Instance settings.
-Administration permits changing only the photo-on-report policy, instance display timezone, and built-in instance theme; it grants no Asset access.
+Administration permits changing the photo-on-report policy, instance display timezone, built-in instance theme, and mail delivery; it grants no Asset access.
 The defaults are optional photos, UTC display, and the `default` theme.
 The photo requirement applies to new reports, including direct API requests, and requires a photo in the same reporting submission.
 Existing Assets remain editable without a photo when the policy changes.
 All stored timestamps remain absolute instants; the configured timezone only affects presentation.
+
+### Mail delivery
+
+System administrators can configure SMTP delivery and send a test message from Administration → Settings.
+Mail configuration is stored in Neo4j on a separate admin-only configuration surface; the public instance-settings response does not include it.
+SMTP passwords are encrypted with AES-256-GCM before persistence and are never returned to the browser.
+TLS, required STARTTLS, and unencrypted SMTP are supported; unencrypted SMTP cannot use authentication.
+Saving an enabled configuration verifies the persisted SMTP connection, TLS mode, and authentication without undoing the save when verification fails.
+Himoroki stores the latest safe verification result and observation time; opening Settings does not contact the SMTP server, and successful test delivery refreshes the observation.
+Mail is disabled by default, and Issue #3 does not enable email verification, password recovery, invitations, or other authentication email flows.
+
+Himoroki generates and reuses an instance master key in its platform application-data directory.
+The Compose deployment stores it in the `himoroki-data` volume at `/var/lib/himoroki/master.key`.
+Native Linux follows `XDG_DATA_HOME` or `~/.local/share/himoroki`; macOS uses `~/Library/Application Support/Himoroki`; Windows uses `LOCALAPPDATA/Himoroki`.
+`HIMOROKI_DATA_DIR` may override the directory.
+Deployments that externally manage keys may set `HIMOROKI_SECRET_KEY` to the unpadded base64url encoding of exactly 32 random bytes.
+
+A complete secret-bearing backup requires both the Neo4j backup and instance master key.
+A database backup alone does not reveal the SMTP password, while losing the key makes the encrypted credential unreadable.
+When a key is missing or wrong, Himoroki keeps non-mail functionality available, fails mail closed, and asks an administrator either to restore the key or explicitly reset all encrypted credentials.
+The reset disables mail, removes encrypted credentials, and rotates the managed filesystem key; deployments using `HIMOROKI_SECRET_KEY` must rotate that external key through their deployment system.
 
 Uploads reserve a short-lived metadata record before storing bytes.
 The Asset and photo relationship commit together only after storage succeeds.
@@ -207,7 +228,7 @@ pnpm test:integration
 ```
 
 The integration runner creates a disposable Neo4j container per suite and an Alarik container for media tests with a random password and localhost port, then stops it after testing.
-Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, immutable provenance after membership removal, signed S3 operations, photo authorization, policy enforcement, timezone presentation, theme persistence, and upload-failure cleanup.
+Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, immutable provenance after membership removal, encrypted mail configuration and recovery, live local SMTP delivery, signed S3 operations, photo authorization, policy enforcement, timezone presentation, theme persistence, and upload-failure cleanup.
 It never uses the application `.env` or an existing database.
 `NEO4J_TEST_IMAGE` may select a locally cached Neo4j 5 image; the default matches Compose's `neo4j:5-community`.
 

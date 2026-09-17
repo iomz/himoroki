@@ -7,6 +7,8 @@ import { maxPhotoBytes, type MediaService } from './media.js';
 import type { Auth } from './auth.js';
 import { canonicalIdentifier, record, requiredText, ValidationError } from './identity.js';
 import { AdministrationError, LastAdministratorError, DuplicateIdentityError, ReferenceError, type IdentityStore, type AssetChanges, type ReportAsset } from './identity-store.js';
+import { MailDeliveryError, MailRevisionConflictError, type MailService } from './mail.js';
+import { SecretUnavailableError } from './secrets.js';
 
 type User = { key: string; name: string };
 type Env = { Variables: { user: User | null } };
@@ -16,7 +18,7 @@ function actor(user: User | null) {
   return user.key;
 }
 
-export function createInventoryApi(store: IdentityStore, auth: Auth, origin: string, media?: MediaService) {
+export function createInventoryApi(store: IdentityStore, auth: Auth, origin: string, media?: MediaService, mail?: MailService) {
   return new Hono<Env>()
     .use('*', async (c, next) => {
       c.header('Cache-Control', 'no-store');
@@ -49,6 +51,23 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
     .patch('/members/:key', validator('json', (value) => record(value, ['name', 'isAdmin']) as { name: string; isAdmin: boolean }), async (c) => c.json({ member: await store.updateMember(actor(c.get('user')), c.req.param('key'), c.req.valid('json')) }))
     .get('/settings', async (c) => c.json({ settings: await store.settings() }))
     .patch('/settings', async (c) => c.json({ settings: await store.updateSettings(actor(c.get('user')), await c.req.json()) }))
+    .get('/admin/mail', async (c) => {
+      if (!mail) throw new HTTPException(503, { message: 'Mail service unavailable' });
+      return c.json({ configuration: await mail.configuration(actor(c.get('user'))) });
+    })
+    .put('/admin/mail', async (c) => {
+      if (!mail) throw new HTTPException(503, { message: 'Mail service unavailable' });
+      return c.json({ configuration: await mail.update(actor(c.get('user')), await c.req.json()) });
+    })
+    .post('/admin/mail/test', async (c) => {
+      if (!mail) throw new HTTPException(503, { message: 'Mail service unavailable' });
+      await mail.sendTest(actor(c.get('user')), await c.req.json());
+      return c.json({ sent: true });
+    })
+    .post('/admin/secrets/reset', async (c) => {
+      if (!mail) throw new HTTPException(503, { message: 'Mail service unavailable' });
+      return c.json({ configuration: await mail.resetSecrets(actor(c.get('user')), await c.req.json()) });
+    })
     .post('/reports', async (c) => {
       const actorKey = actor(c.get('user'));
       if (!media) throw new HTTPException(503, { message: 'Media storage unavailable' });
@@ -120,6 +139,10 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
     .onError((error, c) => {
       if (error instanceof AdministrationError) return c.json({ error: error.message }, 403);
       if (error instanceof LastAdministratorError) return c.json({ error: error.message }, 409);
+      if (error instanceof MailRevisionConflictError) return c.json({ error: error.message }, 409);
+      if (error instanceof SecretUnavailableError) return c.json({ error: 'Instance master key recovery is required before SMTP credentials can be changed' }, 409);
+      if (error instanceof MailDeliveryError) return c.json({ error: error.message, category: error.category },
+        ['disabled', 'incomplete', 'credential-unavailable'].includes(error.category) ? 409 : 502);
       if (error instanceof SyntaxError) return c.json({ error: 'Invalid JSON' }, 400);
       if (error instanceof ValidationError) return c.json({ error: error.message }, 400);
       if (error instanceof ReferenceError) return c.json({ error: 'Resource or Group access not found' }, 404);

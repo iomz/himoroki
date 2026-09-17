@@ -14,6 +14,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY}
       APP_URL: ${APP_URL:?Set APP_URL to the browser-facing origin}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set a random BETTER_AUTH_SECRET in .env}
+      HIMOROKI_DATA_DIR: /var/lib/himoroki
+      HIMOROKI_SECRET_KEY: ${HIMOROKI_SECRET_KEY:-}
+    volumes:
+      - himoroki-data:/var/lib/himoroki
     depends_on:
       alarik:
         condition: service_healthy
@@ -57,4 +61,5 @@ services:
 
 volumes:
   alarik-data:
+  himoroki-data:
   neo4j-data:
