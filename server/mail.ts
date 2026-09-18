@@ -57,6 +57,14 @@ function optionalText(value: unknown, field: string, maximum: number): string | 
   return text;
 }
 
+function mailBody(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()
+      || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) {
+    throw new ValidationError('Mail body is required');
+  }
+  return value.trim();
+}
+
 function hostname(value: unknown): string | null {
   const host = optionalText(value, 'SMTP host', 253);
   if (!host) return null;
@@ -281,7 +289,7 @@ export class MailService implements Mailer {
     const transporter = this.transporter(configuration);
     try {
       await transporter.sendMail({ from: { address: configuration.senderAddress!, name: configuration.senderName! },
-        to, subject: requiredText(message.subject, 'Mail subject'), text: requiredText(message.text, 'Mail body'), html: message.html });
+        to, subject: requiredText(message.subject, 'Mail subject'), text: mailBody(message.text), html: message.html });
       await this.observe(configuration, 'verified');
     } catch (cause) {
       const error = cause instanceof MailDeliveryError ? cause : this.deliveryError(cause, 'delivery');

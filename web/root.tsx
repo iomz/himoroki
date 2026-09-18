@@ -52,6 +52,7 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
   }, [user]);
   useEffect(() => setThemeId(loaderData.themeId), [loaderData.themeId]);
   useEffect(() => setAppearance(loaderData.appearance), [loaderData.appearance]);
+  const authPage = ['/signin', '/signup', '/forgot-password', '/reset-password'].includes(location.pathname);
   const assetsActive = location.pathname === '/' || location.pathname === '/asset' || location.pathname.startsWith('/assets/');
   const theme = themeById(themeId);
   const resolvedAppearance = useResolvedAppearance(appearance);
@@ -60,7 +61,18 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
   useEffect(() => cacheInstanceTheme(theme.id), [theme.id]);
   return <ThemeRuntimeContext.Provider value={{ themeId, setThemeId, appearance, setAppearance,
     colorScheme, setColorSchemePreview }}>
-    <div className="app-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
+    {authPage ? <div className="auth-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
+      <a className="skip-link" href="#workspace">Skip to content</a>
+      <main id="workspace" tabIndex={-1} className="auth-main" aria-busy={busy}>
+        <div className="auth-composition">
+          <Link to="/signin" className="auth-brand" aria-label="Himoroki sign in">
+            <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M5 27V9h6v18M21 27V9h6v18M11 5h10v6H11z" fill="currentColor" /></svg>
+            <span>Himoroki<small>Identity & inventory</small></span>
+          </Link>
+          {actionData?.error && <p role="alert">{actionData.error}</p>}<Outlet />
+        </div>
+      </main>
+    </div> : <div className="app-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
     <a className="skip-link" href="#workspace">Skip to content</a>
     <aside className="sidebar">
       <Link to="/" className="brand" onClick={() => setMenuOpen(false)} aria-label="Himoroki home">
@@ -90,12 +102,12 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
             <Link to="/profile" className="account-profile-link" aria-label="Profile"><span>Profile</span><span aria-hidden="true">›</span></Link>
             <Form method="post" action="/"><button aria-label="Sign out" disabled={busy}>Sign out</button></Form>
           </div>
-        </details> : <Link to="/signin" className="account-signin">Sign in</Link>}
+        </details> : location.pathname !== '/signin' ? <Link to="/signin" className="account-signin">Sign in</Link> : null}
       </header>
       <main id="workspace" tabIndex={-1} className="workspace" aria-busy={busy}>
         {actionData?.error && <p role="alert">{actionData.error}</p>}<Outlet />
       </main>
     </div>
-    </div>
+    </div>}
   </ThemeRuntimeContext.Provider>;
 }

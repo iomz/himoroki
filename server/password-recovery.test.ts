@@ -1,0 +1,72 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { Mailer, MailMessage } from './mail.js';
+import { MailDeliveryError } from './mail.js';
+import { hashPasswordResetIdentifier, invalidateOutstandingResetTokens, passwordResetMessage, passwordResetPrefix,
+  passwordResetURL, queuePasswordResetEmail } from './password-recovery.js';
+import { isInvalidResetError, resetTokenFromHash } from '../web/password-recovery.js';
+
+test('password-reset identifiers retain purpose without retaining token', async () => {
+  const identifier = passwordResetPrefix + 'secret-token';
+  const stored = await hashPasswordResetIdentifier(identifier);
+  assert.ok(stored.startsWith(passwordResetPrefix));
+  assert.ok(!stored.includes('secret-token'));
+  assert.equal(stored, await hashPasswordResetIdentifier(identifier));
+  assert.notEqual(stored, await hashPasswordResetIdentifier(passwordResetPrefix + 'another-token'));
+  await assert.rejects(() => hashPasswordResetIdentifier('email-verification:secret'));
+});
+
+test('reset links use canonical origin and keep token in fragment', () => {
+  const url = passwordResetURL('https://himoroki.example/base?ignored=yes', 'a/b?c');
+  assert.equal(url, 'https://himoroki.example/reset-password#token=a%2Fb%3Fc');
+  assert.equal(resetTokenFromHash(new URL(url).hash), 'a/b?c');
+  assert.equal(resetTokenFromHash('#other=value'), null);
+  const message = passwordResetMessage('https://himoroki.example', 'person@example.com', 'token');
+  assert.equal(message.to, 'person@example.com');
+  assert.match(message.subject, /Reset your Himoroki password/);
+  assert.match(message.text, /Open this link to choose a new password:\nhttps:\/\/himoroki\.example\/reset-password#token=token\n/);
+  assert.match(message.text, /expires in one hour and can be used only once/);
+  assert.match(message.text, /ignore this email/);
+  assert.match(message.text, /password will remain unchanged/);
+});
+
+test('mail dispatch is asynchronous and reports only safe failure category', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  let received: MailMessage | undefined;
+  const mailer: Mailer = { async send(message) { received = message; await pending;
+    throw new MailDeliveryError('connection', 'private provider detail'); } };
+  const original = console.error;
+  const logs: unknown[][] = [];
+  console.error = (...values: unknown[]) => { logs.push(values); };
+  try {
+    queuePasswordResetEmail(mailer, 'https://himoroki.example', 'person@example.com', 'secret-token');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(received?.to, 'person@example.com');
+    assert.equal(logs.length, 0);
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(logs, [['Password recovery mail delivery failed', { category: 'connection' }]]);
+    assert.ok(!JSON.stringify(logs).includes('secret-token'));
+    assert.ok(!JSON.stringify(logs).includes('private provider detail'));
+  } finally { console.error = original; }
+});
+
+test('reset errors expose one invalid-link state', () => {
+  assert.equal(isInvalidResetError({ code: 'INVALID_TOKEN' }), true);
+  assert.equal(isInvalidResetError({ message: 'User not found' }), true);
+  assert.equal(isInvalidResetError({ code: 'PASSWORD_TOO_SHORT' }), false);
+});
+
+test('sibling cleanup failure is swallowed without exposing persistence details', async () => {
+  const original = console.error;
+  const logs: unknown[][] = [];
+  console.error = (...values: unknown[]) => { logs.push(values); };
+  try {
+    await invalidateOutstandingResetTokens({
+      async deleteOutstandingResetTokens() { throw new Error('private database detail'); },
+    }, 'user-id');
+    assert.deepEqual(logs, [['Outstanding password-reset tokens could not be invalidated']]);
+    assert.ok(!JSON.stringify(logs).includes('private database detail'));
+  } finally { console.error = original; }
+});

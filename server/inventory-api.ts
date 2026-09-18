@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { validator } from 'hono/validator';
+import { isAPIError } from 'better-auth/api';
 import { assetPageRequest } from './asset-page.js';
 import { maxPhotoBytes, type MediaService } from './media.js';
 import type { Auth } from './auth.js';
@@ -12,7 +13,8 @@ import { SecretUnavailableError } from './secrets.js';
 
 type User = { key: string; name: string };
 type Env = { Variables: { user: User | null } };
-const authPaths = new Set(['/api/auth/sign-up/email', '/api/auth/sign-in/email', '/api/auth/sign-out', '/api/auth/get-session']);
+const authPaths = new Set(['/api/auth/sign-up/email', '/api/auth/sign-in/email', '/api/auth/sign-out',
+  '/api/auth/get-session', '/api/auth/change-password', '/api/auth/request-password-reset', '/api/auth/reset-password']);
 function actor(user: User | null) {
   if (!user) throw new HTTPException(401, { message: 'Sign in required' });
   return user.key;
@@ -44,6 +46,37 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       const name = requiredText(c.req.valid('json').name, 'name');
       await auth.api.updateUser({ headers: c.req.raw.headers, body: { name } });
       return c.json({ member: await store.profile(key) });
+    })
+    .patch('/profile/email', validator('json', (value) =>
+      record(value, ['newEmail', 'currentPassword']) as { newEmail: unknown; currentPassword: unknown }), async (c) => {
+      const key = actor(c.get('user'));
+      const { newEmail, currentPassword } = c.req.valid('json');
+      if (typeof newEmail !== 'string' || typeof currentPassword !== 'string') {
+        throw new ValidationError('Email and current password are required');
+      }
+      try {
+        await auth.api.verifyPassword({ headers: c.req.raw.headers, body: { password: currentPassword } });
+      } catch (error) {
+        if (isAPIError(error)) {
+          if (error.statusCode === 401) throw new HTTPException(401, { message: 'Sign in required' });
+          throw new HTTPException(400, { message: 'Current password is incorrect' });
+        }
+        throw error;
+      }
+      try {
+        await auth.api.changeEmail({ headers: c.req.raw.headers, body: { newEmail } });
+      } catch (error) {
+        if (isAPIError(error)) {
+          if (error.statusCode === 401) throw new HTTPException(401, { message: 'Sign in required' });
+          throw new HTTPException(400, { message: 'Email address could not be changed' });
+        }
+        throw error;
+      }
+      const member = await store.profile(key);
+      if (member.email !== newEmail.toLowerCase()) {
+        throw new HTTPException(409, { message: 'Email address could not be changed' });
+      }
+      return c.json({ member });
     })
     .patch('/profile/appearance', async (c) =>
       c.json({ appearance: await store.updateAppearance(actor(c.get('user')), await c.req.json()) }))

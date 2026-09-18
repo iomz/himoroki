@@ -26,7 +26,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
     const keyManager = await MasterKeyManager.open(await store.hasEncryptedSecrets(), { HIMOROKI_DATA_DIR: data });
     const mail = new MailService(store, keyManager);
     const origin = 'http://localhost:3000';
-    const auth = await createAuth(driver, origin, randomBytes(32).toString('hex'));
+    const auth = await createAuth(driver, origin, randomBytes(32).toString('hex'), mail);
     const app = new Hono().route('/api', createInventoryApi(store, auth, origin, undefined, mail));
 
     const cookies = new Map<number, string>();
@@ -96,6 +96,19 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
       const observed = (await (await admin('/admin/mail')).json()).configuration;
       assert.equal(observed.verificationStatus, 'verified');
       assert.ok(observed.verificationObservedAt);
+    });
+
+    await t.test('password recovery uses persisted SMTP configuration', async () => {
+      received = '';
+      const response = await admin('/auth/request-password-reset', 'POST', { email: 'mail0@example.com' });
+      assert.equal(response.status, 200, await response.clone().text());
+      for (let attempt = 0; attempt < 100 && !received; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      const unfolded = received.replace(/=\r?\n/g, '');
+      assert.match(unfolded, /Subject: Reset your Himoroki password/);
+      assert.match(unfolded, /\/reset-password#token=3D[A-Za-z0-9]/);
+      assert.ok(!unfolded.includes('test-password-12345'));
     });
 
     let envelope = '';

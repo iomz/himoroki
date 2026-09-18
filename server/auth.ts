@@ -5,18 +5,36 @@ import { getAuthTables } from 'better-auth/db';
 import { neo4jAdapter, buildSchemaStatements } from 'neo4j-better-auth';
 import type { Driver } from 'neo4j-driver';
 import { requiredText } from './identity.js';
+import type { Mailer } from './mail.js';
+import { hashPasswordResetIdentifier, invalidateOutstandingResetTokens, PasswordRecoveryStore, passwordResetPrefix,
+  queuePasswordResetEmail } from './password-recovery.js';
 
-export async function createAuth(driver: Driver, baseURL: string, secret: string) {
+export async function createAuth(driver: Driver, baseURL: string, secret: string, mailer?: Mailer) {
   if (secret.length < 32) throw new Error('BETTER_AUTH_SECRET must contain at least 32 characters');
   const origin = new URL(baseURL).origin;
+  const recovery = new PasswordRecoveryStore(driver);
   const auth = betterAuth({
     baseURL: origin,
     secret,
     trustedOrigins: [origin],
     database: neo4jAdapter({ driver }),
-    emailAndPassword: { enabled: true, minPasswordLength: 12 },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 12,
+      resetPasswordTokenExpiresIn: 3600,
+      revokeSessionsOnPasswordReset: true,
+      ...(mailer ? { sendResetPassword: async ({ user, token }: { user: { email: string }; token: string }) => {
+        queuePasswordResetEmail(mailer, origin, user.email, token);
+      } } : {}),
+      onPasswordReset: async ({ user }) => {
+        await invalidateOutstandingResetTokens(recovery, user.id);
+      },
+    },
     user: {
       modelName: 'User',
+      // Current password step-up is enforced by Himoroki's profile endpoint.
+      // Revisit this immediate-update policy when email verification is introduced.
+      changeEmail: { enabled: true, updateEmailWithoutVerification: true },
       additionalFields: {
         // Same User node as the domain model. Never accepted from signup input.
         key: { type: 'string', required: false, input: false, unique: true },
@@ -24,7 +42,13 @@ export async function createAuth(driver: Driver, baseURL: string, secret: string
     },
     session: { modelName: 'AuthSession', cookieCache: { enabled: false } },
     account: { modelName: 'AuthAccount' },
-    verification: { modelName: 'AuthVerification' },
+    verification: {
+      modelName: 'AuthVerification',
+      storeIdentifier: {
+        default: 'plain',
+        overrides: { [passwordResetPrefix]: { hash: hashPasswordResetIdentifier } },
+      },
+    },
     advanced: {
       database: { generateId: 'uuid' },
       // The Node entry point overwrites this header with the TCP peer address.

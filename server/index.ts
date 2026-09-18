@@ -42,7 +42,7 @@ const cleanup = () => media.cleanup().catch((error) => console.error('Photo clea
 await cleanup();
 const cleanupTimer = setInterval(cleanup, 60000);
 cleanupTimer.unref();
-const auth = await createAuth(driver, appURL, authSecret);
+const auth = await createAuth(driver, appURL, authSecret, mail);
 app.use('/api/*', async (c, next) => {
   c.req.raw.headers.delete('x-himoroki-client-ip');
   const address = getConnInfo(c).remote.address;

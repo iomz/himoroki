@@ -139,7 +139,9 @@ The adapter and Better Auth versions are pinned; upgrades must pass the real Neo
 Create an account, open Groups from the sidebar to create a Group or ask an existing member to add your member key, then report an Asset from the Assets workspace.
 The persistent header searches accessible Assets by name on Enter; ⌘K or Ctrl+K focuses search and Escape blurs it.
 The account menu provides Profile and sign-out.
-Profile lets signed-in Users update their display name and choose System, Light, or Dark appearance; email remains read-only.
+Profile lets signed-in Users update their display name, change their email or password after current-password confirmation, and choose System, Light, or Dark appearance.
+Changing email immediately updates both password sign-in and password-recovery delivery in the current unverified email/password model.
+Changing password signs out other sessions while preserving the session performing the change.
 Appearance applies the selected instance theme's corresponding palette only to that User, and System follows live browser or operating-system preference changes.
 Administration → Members lists registered accounts and lets system administrators edit names and administrator status.
 The final administrator cannot be revoked; concurrent role changes are serialized in Neo4j.
@@ -163,7 +165,7 @@ Ordering remains name followed by supported identifier; each request checks curr
 
 Unsafe API requests require an Origin matching `APP_URL`.
 Better Auth rate limiting uses the TCP peer address set by the Node server; forwarded client IP headers are not trusted, so clients behind one reverse proxy share its rate-limit bucket.
-Authentication routes are limited to sign-up, sign-in, sign-out, and session lookup.
+Authentication routes are limited to sign-up, sign-in, sign-out, session lookup, password change, and password recovery.
 External identity providers and identifier issuance remain deferred.
 
 ## Photos and administration
@@ -197,7 +199,10 @@ SMTP passwords are encrypted with AES-256-GCM before persistence and are never r
 TLS, required STARTTLS, and unencrypted SMTP are supported; unencrypted SMTP cannot use authentication.
 Saving an enabled configuration verifies the persisted SMTP connection, TLS mode, and authentication without undoing the save when verification fails.
 Himoroki stores the latest safe verification result and observation time; opening Settings does not contact the SMTP server, and successful test delivery refreshes the observation.
-Mail is disabled by default, and Issue #3 does not enable email verification, password recovery, invitations, or other authentication email flows.
+Mail is disabled by default.
+When mail is configured, password-based accounts can request a one-hour, single-use password-reset link from the sign-in experience.
+Reset requests never disclose whether an eligible account exists or whether delivery succeeded; successful resets revoke existing sessions.
+Email verification, invitations, email-change verification, and other authentication email flows remain disabled.
 
 Himoroki generates and reuses an instance master key in its platform application-data directory.
 The Compose deployment stores it in the `himoroki-data` volume at `/var/lib/himoroki/master.key`.
@@ -228,7 +233,7 @@ pnpm test:integration
 ```
 
 The integration runner creates a disposable Neo4j container per suite and an Alarik container for media tests with a random password and localhost port, then stops it after testing.
-Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, explicit Group reporting, private/public authorization, immutable provenance after membership removal, encrypted mail configuration and recovery, live local SMTP delivery, signed S3 operations, photo authorization, policy enforcement, timezone presentation, theme persistence, and upload-failure cleanup.
+Tests cover canonicalization, conflicting claims, transactional and concurrent duplicate rejection, persisted authentication, password-stepped credential changes and recovery, explicit Group reporting, private/public authorization, immutable provenance after membership removal, encrypted mail configuration and recovery, live local SMTP delivery, signed S3 operations, photo authorization, policy enforcement, timezone presentation, theme persistence, and upload-failure cleanup.
 It never uses the application `.env` or an existing database.
 `NEO4J_TEST_IMAGE` may select a locally cached Neo4j 5 image; the default matches Compose's `neo4j:5-community`.
 

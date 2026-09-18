@@ -133,12 +133,12 @@ test('SMTP delivery maps persisted security, sender, authentication, and recipie
   let closed = false;
   const transporter = { sendMail: async (value: unknown) => { message = value; }, close: () => { closed = true; } } as unknown as Transporter;
   const service = new MailService(store, manager, (value) => { options = value; return transporter; });
-  await service.send({ to: 'tester@EXAMPLE.COM', subject: 'Subject', text: 'Body' });
+  await service.send({ to: 'tester@EXAMPLE.COM', subject: 'Subject', text: 'First paragraph.\n\nSecond paragraph.' });
   assert.deepEqual(options, { host: 'smtp.example.com', port: 587, secure: false, requireTLS: true,
     ignoreTLS: false, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
     auth: { user: 'mailer', pass: 'secret' } });
   assert.deepEqual(message, { from: { address: 'noreply@example.com', name: 'Himoroki' },
-    to: 'tester@example.com', subject: 'Subject', text: 'Body', html: undefined });
+    to: 'tester@example.com', subject: 'Subject', text: 'First paragraph.\n\nSecond paragraph.', html: undefined });
   assert.equal(closed, true);
   assert.equal(store.configuration.verificationStatus, 'verified');
   assert.ok(store.configuration.verificationObservedAt);
