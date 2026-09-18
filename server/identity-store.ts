@@ -15,16 +15,21 @@ export class DuplicateIdentityError extends Error {}
 export class ReferenceError extends Error {}
 export class AdministrationError extends Error {}
 export class LastAdministratorError extends Error {}
-export type Member = { key: string; name: string; email: string; isAdmin: boolean; createdAt: string | null };
+export type Member = { key: string; name: string; email: string; isAdmin: boolean;
+  credentialState: 'pending' | 'established'; createdAt: string | null };
+export type MemberAccount = Member & { id: string };
 export type AccountState = { isAdmin: boolean; appearance: AppearancePreference };
-const memberProjection = `u { .key, .name, .email, isAdmin: coalesce(u.isAdmin, false), createdAt: toString(u.createdAt) }`;
+const memberProjection = `u { .key, .name, .email, isAdmin: u.role = 'admin',
+  credentialState: CASE WHEN EXISTS { MATCH (u)-[:HAS_AUTHACCOUNT]->(:AuthAccount {providerId: 'credential'}) }
+    THEN 'established' ELSE 'pending' END, createdAt: toString(u.createdAt) }`;
 
 // Entity keys are internal references. Assets have no generated application ID.
 export type Entity = Readonly<{ key: string; name: string }>;
+export type ReporterAttribution = Entity & Readonly<{ status: 'active' | 'deleted' }>;
 export type Asset = Readonly<{
   name: string;
   identifier: AssetIdentifier;
-  reportedBy: Entity;
+  reportedBy: ReporterAttribution;
   reportedAt: string;
   owner: Entity | null;
   groups: readonly Entity[];
@@ -70,7 +75,9 @@ const assetProjection = `
   OPTIONAL MATCH (a)-[:OWNED_BY]->(o:Owner)
   WITH a, u, o, collect(g { .key, .name }) AS groups
   RETURN a { .name, .isPublic, reportedAt: toString(a.reportedAt),
-    reportedBy: u { .key, .name }, owner: o { .key, .name },
+    reportedBy: { key: u.key,
+      name: CASE WHEN u.accountDeletedAt IS NULL THEN u.name ELSE coalesce(u.provenanceName, u.name, 'Deleted member') END,
+      status: CASE WHEN u.accountDeletedAt IS NULL THEN 'active' ELSE 'deleted' END }, owner: o { .key, .name },
     groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] } AS asset`;
 
 /** Internal persistence API. Callers must supply a trusted actor context.
@@ -91,6 +98,11 @@ export class IdentityStore {
       await session.run(`MERGE (m:MailConfiguration {key: 'instance'})
         ON CREATE SET m.enabled = false, m.transport = 'smtp', m.revision = 0
         SET m.verificationStatus = coalesce(m.verificationStatus, 'not-verified')`);
+      // Better Auth role is sole persisted administrator authority. Preserve existing
+      // installations once, then remove legacy duplicate state.
+      await session.run(`MATCH (u:User) WHERE u.id IS NOT NULL
+        SET u.role = CASE WHEN u.isAdmin = true THEN 'admin' ELSE coalesce(u.role, 'user') END
+        REMOVE u.isAdmin`);
       const result = await session.run('SHOW CONSTRAINTS YIELD type, labelsOrTypes, properties RETURN *');
       for (const [label, properties] of [
         ['Settings', ['key']], ['MailConfiguration', ['key']], ['Media', ['key']], ['User', ['key']], ['Group', ['key']], ['Owner', ['key']],
@@ -127,7 +139,7 @@ export class IdentityStore {
   async createReportingGroup(name: string, actorKey: string): Promise<Entity> {
     const group = { key: randomUUID(), name: requiredText(name, 'name') };
     return this.write(async (tx) => {
-      const result = await tx.run(`MATCH (u:User {key: $actorKey})
+      const result = await tx.run(`MATCH (u:User {key: $actorKey}) WHERE u.accountDeletedAt IS NULL
         CREATE (g:Group $group), (u)-[:MEMBER_OF]->(g) RETURN g.key`, { actorKey, group });
       if (!result.records.length) throw new ReferenceError('User does not exist');
       return group;
@@ -144,13 +156,16 @@ export class IdentityStore {
     } finally { await session.close(); }
   }
 
-  async addGroupMember(actorKey: string, groupKey: string, userKey: string): Promise<void> {
-    await this.write(async (tx) => {
+  async addGroupMember(actorKey: string, groupKey: string, userKey: string): Promise<boolean> {
+    return this.write(async (tx) => {
       const result = await tx.run(`
         MATCH (:User {key: $actorKey})-[:MEMBER_OF]->(g:Group {key: $groupKey})
-        MATCH (u:User {key: $userKey})
-        MERGE (u)-[:MEMBER_OF]->(g) RETURN g.key`, { actorKey, groupKey, userKey });
+        MATCH (u:User {key: $userKey}) WHERE u.accountDeletedAt IS NULL
+        OPTIONAL MATCH (u)-[existing:MEMBER_OF]->(g)
+        WITH u, g, existing IS NOT NULL AS alreadyMember
+        MERGE (u)-[:MEMBER_OF]->(g) RETURN alreadyMember`, { actorKey, groupKey, userKey });
       if (!result.records.length) throw new ReferenceError('Group access or target User not found');
+      return result.records[0].get('alreadyMember') !== true;
     });
   }
 
@@ -169,6 +184,7 @@ export class IdentityStore {
     };
     await this.write(async (tx) => {
       const result = await tx.run(`MATCH (u:User {key: $userKey}), (g:Group {key: $groupKey})
+        WHERE u.accountDeletedAt IS NULL
         MERGE (u)-[:MEMBER_OF]->(g) RETURN g.key`, params);
       if (!result.records.length) throw new ReferenceError('User or Group does not exist');
     });
@@ -266,7 +282,10 @@ export class IdentityStore {
           WITH a, identity, u, o, collect(g { .key, .name }) AS groups
           ORDER BY a.name, identity.scheme, identity.value, identity.serial
           RETURN collect({asset: a { .name, .isPublic, reportedAt: toString(a.reportedAt),
-            reportedBy: u { .key, .name }, owner: o { .key, .name }, groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] },
+            reportedBy: { key: u.key,
+              name: CASE WHEN u.accountDeletedAt IS NULL THEN u.name ELSE coalesce(u.provenanceName, u.name, 'Deleted member') END,
+              status: CASE WHEN u.accountDeletedAt IS NULL THEN 'active' ELSE 'deleted' END },
+            owner: o { .key, .name }, groups: groups, photos: [(a)-[:HAS_PHOTO]->(m:Media) | m { .key, .contentType, size: toFloat(m.size) }] },
             identifier: identity { .scheme, .value, .serial }}) AS rows
         }
         RETURN total, scopes, rows`, { actorKey, text, scope, after, fetchSize: int(limit + 1) }));
@@ -287,7 +306,7 @@ export class IdentityStore {
 
   async members(actorKey: string): Promise<Member[]> {
     return this.write(async (tx) => {
-      const allowed = await tx.run('MATCH (:User {key: $actorKey, isAdmin: true}) RETURN true', { actorKey });
+      const allowed = await tx.run("MATCH (:User {key: $actorKey, role: 'admin'}) RETURN true", { actorKey });
       if (!allowed.records.length) throw new AdministrationError('Administrator access required');
       const result = await tx.run(`MATCH (u:User) WHERE u.id IS NOT NULL RETURN ${memberProjection} AS member ORDER BY toLower(u.name), u.key`);
       return result.records.map((row) => row.get('member'));
@@ -300,10 +319,19 @@ export class IdentityStore {
     return result.records[0].get('member');
   }
 
+  async ownDeletionBlocked(actorKey: string): Promise<boolean> {
+    const result = await this.write((tx) => tx.run(`MATCH (u:User {key: $actorKey}) WHERE u.id IS NOT NULL
+      OPTIONAL MATCH (administrator:User {role: 'admin'}) WHERE administrator.id IS NOT NULL
+      WITH u, count(administrator) AS administratorCount
+      RETURN u.role = 'admin' AND administratorCount <= 1 AS blocked`, { actorKey }));
+    if (!result.records.length) throw new ReferenceError('User not found');
+    return result.records[0].get('blocked') === true;
+  }
+
   async accountState(actorKey: string | null): Promise<AccountState> {
     if (!actorKey) return { isAdmin: false, appearance: 'system' };
     const result = await this.write((tx) => tx.run(`MATCH (u:User {key: $actorKey})
-      RETURN u.isAdmin = true AS isAdmin, coalesce(u.appearance, 'system') AS appearance`, { actorKey }));
+      RETURN u.role = 'admin' AS isAdmin, coalesce(u.appearance, 'system') AS appearance`, { actorKey }));
     if (!result.records.length) throw new ReferenceError('User not found');
     const appearance = result.records[0].get('appearance');
     if (!isAppearancePreference(appearance)) throw new Error('Stored User appearance is invalid');
@@ -319,29 +347,70 @@ export class IdentityStore {
     return result.records[0].get('appearance');
   }
 
-  async updateMember(actorKey: string, targetKey: string, value: unknown): Promise<Member> {
-    const input = record(value, ['name', 'isAdmin']);
-    const name = requiredText(input.name, 'name');
-    if (typeof input.isAdmin !== 'boolean') throw new ValidationError('Administrator status must be a boolean');
+  async memberAccount(actorKey: string, targetKey: string): Promise<MemberAccount> {
+    const result = await this.write((tx) => tx.run(`MATCH (:User {key: $actorKey, role: 'admin'}),
+      (u:User {key: $targetKey}) WHERE u.id IS NOT NULL
+      RETURN ${memberProjection} AS member, u.id AS id`, { actorKey, targetKey }));
+    if (!result.records.length) throw new ReferenceError('User not found');
+    return { ...result.records[0].get('member'), id: result.records[0].get('id') };
+  }
+
+  async updateMemberRole(actorKey: string, targetKey: string, isAdmin: boolean): Promise<Member> {
+    if (typeof isAdmin !== 'boolean') throw new ValidationError('Administrator status must be a boolean');
     return this.write(async (tx) => {
       // Serialize role changes before checking the actor and counting administrators.
       // Reuse the existing instance lock; no separate role or locking framework.
       await tx.run("MATCH (s:Settings {key: 'instance'}) SET s.revision = s.revision + 1 RETURN s.key");
-      const allowed = await tx.run('MATCH (:User {key: $actorKey, isAdmin: true}) RETURN true', { actorKey });
+      const allowed = await tx.run("MATCH (:User {key: $actorKey, role: 'admin'}) RETURN true", { actorKey });
       if (!allowed.records.length) throw new AdministrationError('Administrator access required');
-      const target = await tx.run('MATCH (u:User {key: $targetKey}) WHERE u.id IS NOT NULL RETURN u.isAdmin AS admin', { targetKey });
+      const target = await tx.run("MATCH (u:User {key: $targetKey}) WHERE u.id IS NOT NULL RETURN u.role = 'admin' AS admin", { targetKey });
       if (!target.records.length) throw new ReferenceError('User not found');
-      if (input.isAdmin === false && target.records[0].get('admin') === true) {
-        const count = await tx.run('MATCH (u:User {isAdmin: true}) WHERE u.id IS NOT NULL RETURN count(u) AS count');
+      if (!isAdmin && target.records[0].get('admin') === true) {
+        const count = await tx.run("MATCH (u:User {role: 'admin'}) WHERE u.id IS NOT NULL RETURN count(u) AS count");
         if (count.records[0].get('count').toNumber() <= 1) throw new LastAdministratorError('The final system administrator cannot be removed');
       }
-      // Better Auth has no arbitrary-user update API in this configuration. Update
-      // its User node atomically with the role, without touching authentication data.
       const result = await tx.run(`MATCH (u:User {key: $targetKey})
-        SET u.name = $name, u.updatedAt = $updatedAt
-        SET u.isAdmin = $isAdmin
-        RETURN ${memberProjection} AS member`, { targetKey, name, updatedAt: new Date().toISOString(), isAdmin: input.isAdmin });
+        SET u.role = $role, u.updatedAt = $updatedAt
+        RETURN ${memberProjection} AS member`, { targetKey, updatedAt: new Date().toISOString(), role: isAdmin ? 'admin' : 'user' });
       return result.records[0].get('member');
+    });
+  }
+
+  async deactivateMember(actorKey: string, targetKey: string): Promise<void> {
+    await this.deactivateAccount(actorKey, targetKey, 'administrator');
+  }
+
+  async deactivateOwnAccount(actorKey: string): Promise<void> {
+    await this.deactivateAccount(actorKey, actorKey, 'self');
+  }
+
+  private async deactivateAccount(actorKey: string, targetKey: string,
+    authority: 'administrator' | 'self'): Promise<void> {
+    await this.write(async (tx) => {
+      await tx.run("MATCH (s:Settings {key: 'instance'}) SET s.revision = s.revision + 1 RETURN s.key");
+      if (authority === 'administrator') {
+        const actor = await tx.run("MATCH (u:User {key: $actorKey, role: 'admin'}) WHERE u.id IS NOT NULL RETURN u.key", { actorKey });
+        if (!actor.records.length) throw new AdministrationError('Administrator access required');
+        if (actorKey === targetKey) throw new AdministrationError('Delete your own account from Profile');
+      }
+      const target = await tx.run(`MATCH (u:User {key: $targetKey}) WHERE u.id IS NOT NULL
+        RETURN u.id AS id, u.role = 'admin' AS admin`, { targetKey });
+      if (!target.records.length) throw new ReferenceError('User not found');
+      if (target.records[0].get('admin') === true) {
+        const count = await tx.run("MATCH (u:User {role: 'admin'}) WHERE u.id IS NOT NULL RETURN count(u) AS count");
+        if (count.records[0].get('count').toNumber() <= 1) throw new LastAdministratorError('The final system administrator cannot be removed');
+      }
+      const userId = target.records[0].get('id');
+      await tx.run(`MATCH (u:User {key: $targetKey})
+        OPTIONAL MATCH (u)-[:HAS_AUTHSESSION]->(s:AuthSession)
+        OPTIONAL MATCH (u)-[:HAS_AUTHACCOUNT]->(a:AuthAccount)
+        DETACH DELETE s, a`, { targetKey });
+      await tx.run(`MATCH (v:AuthVerification) WHERE v.value = $userId DETACH DELETE v`, { userId });
+      await tx.run(`MATCH (u:User {key: $targetKey})-[m:MEMBER_OF]->(:Group) DELETE m`, { targetKey });
+      await tx.run(`MATCH (u:User {key: $targetKey})
+        SET u.provenanceName = u.name, u.accountDeletedAt = $deletedAt
+        REMOVE u.id, u.name, u.email, u.emailVerified, u.image, u.createdAt, u.updatedAt, u.appearance, u.role,
+          u.banned, u.banReason, u.banExpires`, { targetKey, deletedAt: new Date().toISOString() });
     });
   }
 
@@ -353,7 +422,7 @@ export class IdentityStore {
   async updateSettings(actorKey: string, value: unknown): Promise<Settings> {
     const settings = validateSettings(value);
     return this.write(async (tx) => {
-      const result = await tx.run(`MATCH (:User {key: $actorKey, isAdmin: true}), (s:Settings {key: 'instance'})
+      const result = await tx.run(`MATCH (:User {key: $actorKey, role: 'admin'}), (s:Settings {key: 'instance'})
         SET s.revision = s.revision + 1, s.requirePhoto = $settings.requirePhoto,
           s.displayTimezone = $settings.displayTimezone, s.themeId = $settings.themeId
         RETURN s.key`, { actorKey, settings });
@@ -379,7 +448,7 @@ export class IdentityStore {
   async readMailConfiguration(actorKey: string): Promise<StoredMailConfiguration> {
     const session = this.driver.session();
     try {
-      const result = await session.executeRead((tx) => tx.run(`MATCH (:User {key: $actorKey, isAdmin: true})
+      const result = await session.executeRead((tx) => tx.run(`MATCH (:User {key: $actorKey, role: 'admin'})
         MATCH (m:MailConfiguration {key: 'instance'}) RETURN ${IdentityStore.mailProjection} AS configuration`, { actorKey }));
       if (!result.records.length) throw new AdministrationError('Administrator access required');
       return result.records[0].get('configuration');
@@ -398,7 +467,7 @@ export class IdentityStore {
   async replaceMailConfiguration(actorKey: string, expectedRevision: number,
     configuration: PersistedMailSettings): Promise<StoredMailConfiguration> {
     return this.write(async (tx) => {
-      const allowed = await tx.run('MATCH (u:User {key: $actorKey, isAdmin: true}) RETURN u.key', { actorKey });
+      const allowed = await tx.run("MATCH (u:User {key: $actorKey, role: 'admin'}) RETURN u.key", { actorKey });
       if (!allowed.records.length) throw new AdministrationError('Administrator access required');
       const result = await tx.run(`MATCH (m:MailConfiguration {key: 'instance', revision: $expectedRevision})
         SET m += $configuration, m.revision = m.revision + 1
@@ -422,7 +491,7 @@ export class IdentityStore {
 
   async resetEncryptedSecrets(actorKey: string, expectedRevision: number): Promise<StoredMailConfiguration> {
     return this.write(async (tx) => {
-      const allowed = await tx.run('MATCH (u:User {key: $actorKey, isAdmin: true}) RETURN u.key', { actorKey });
+      const allowed = await tx.run("MATCH (u:User {key: $actorKey, role: 'admin'}) RETURN u.key", { actorKey });
       if (!allowed.records.length) throw new AdministrationError('Administrator access required');
       const result = await tx.run(`MATCH (m:MailConfiguration {key: 'instance', revision: $expectedRevision})
         SET m.enabled = false, m.revision = m.revision + 1, m.verificationStatus = 'not-verified'

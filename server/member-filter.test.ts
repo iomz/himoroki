@@ -4,8 +4,8 @@ import type { Member } from './identity-store.js';
 import { filterMembers } from '../web/member-filter.js';
 
 const members: Member[] = [
-  { key: '1', name: 'Alex Demo', email: 'evaluator@demo.invalid', isAdmin: true, createdAt: null },
-  { key: '2', name: 'Morgan Demo', email: 'collaborator@demo.invalid', isAdmin: false, createdAt: null },
+  { key: '1', name: 'Alex Demo', email: 'evaluator@demo.invalid', isAdmin: true, credentialState: 'established', createdAt: null },
+  { key: '2', name: 'Morgan Demo', email: 'collaborator@demo.invalid', isAdmin: false, credentialState: 'pending', createdAt: null },
 ];
 
 test('member search matches name and email without changing loaded order', () => {

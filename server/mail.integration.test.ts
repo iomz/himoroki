@@ -49,7 +49,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
     }
     const adminKey = (await (await admin('/me')).json()).user.key;
     const session = driver.session();
-    await session.run('MATCH (u:User {key: $key}) SET u.isAdmin = true', { key: adminKey });
+    await session.run("MATCH (u:User {key: $key}) SET u.role = 'admin'", { key: adminKey });
     await session.close();
 
     await t.test('mail API is administrator-only and defaults disabled without secret disclosure', async () => {

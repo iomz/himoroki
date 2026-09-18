@@ -62,7 +62,7 @@ export async function runDemo(mode: DemoMode, args: string[], env: NodeJS.Proces
       users.push(response.user.key);
     }
     // Same explicit administrative grant as admin:grant; it grants no Asset access.
-    await session.run('MATCH (u:User {key: $key}) SET u.isAdmin = true', { key: users[0] });
+    await session.run("MATCH (u:User {key: $key}) SET u.role = 'admin' REMOVE u.isAdmin", { key: users[0] });
     await store.updateSettings(users[0], { requirePhoto: false, displayTimezone: 'UTC', themeId: 'default' });
     const groups = [];
     for (const [index, name] of demoGroups.entries()) groups.push(await store.createReportingGroup(name, users[[0, 1, 0, 2][index]]));

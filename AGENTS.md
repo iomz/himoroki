@@ -11,6 +11,10 @@ Preserve the README naming story at the bottom of README.
 - Public Asset identity uses supported identifiers such as SGTIN or GRAI, never a separate application ID.
 - Internal database keys remain implementation details.
 - GS1 Digital Link, resolver semantics, and identifier issuance remain deferred.
+- Account deletion removes the active personal account but preserves immutable Asset provenance by default.
+- Deleted reporters become non-active tombstones that retain only the deletion-time display name required for human-readable provenance; they must not behave as discoverable Users.
+- Tombstones do not retain email, credentials, sessions, preferences, administrator roles, or Group memberships.
+- Deleting a Group's final member does not delete the Group; empty Groups are valid.
 
 # Design principles
 

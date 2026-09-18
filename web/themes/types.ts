@@ -28,6 +28,9 @@ export type ThemePalette = {
   selectedIndicator: string;
   successSurface: string;
   successText: string;
+  warningSurface: string;
+  warningText: string;
+  warningBorder: string;
   dangerSurface: string;
   dangerText: string;
 };

@@ -1,5 +1,6 @@
 import { Form, Link, redirect, useLocation, useNavigation } from 'react-router';
 import { api, authClient, unwrap } from '../api';
+import { PasswordField } from '../password-field';
 import type { Route } from './+types/signin';
 
 export async function clientLoader() {
@@ -27,14 +28,9 @@ export default function SignIn({ actionData }: Route.ComponentProps) {
         <input type="hidden" name="intent" value={signup ? 'signup' : 'signin'} />
         {signup && <label>Name<input name="name" required autoComplete="name" /></label>}
         <label>Email<input name="email" type="email" required autoComplete="email" /></label>
-        <div className="auth-password-field">
-          <div className="auth-password-label">
-            <label htmlFor="auth-password">Password</label>
-            {!signup && <Link className="forgot-password-link" to="/forgot-password">Forgot password?</Link>}
-          </div>
-          <input id="auth-password" name="password" type="password" required minLength={signup ? 12 : undefined}
-            autoComplete={signup ? 'new-password' : 'current-password'} />
-        </div>
+        <PasswordField id="auth-password" label="Password" name="password" required minLength={signup ? 12 : undefined}
+          autoComplete={signup ? 'new-password' : 'current-password'}
+          aside={!signup && <Link className="forgot-password-link" to="/forgot-password">Forgot password?</Link>} />
         {signup && <p className="hint">Use at least 12 characters.</p>}
         <button type="submit" className="auth-submit">{signup ? 'Create account' : 'Sign in'}</button>
       </fieldset></Form>

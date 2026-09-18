@@ -11,7 +11,8 @@ export const monoBlueTheme = {
     link: '#245f95', linkHover: '#194a77', focus: '#245f95',
     action: '#244f7a', actionHover: '#193d61', actionText: '#ffffff',
     selectedSurface: '#deebf6', selectedText: '#204f77', selectedIndicator: '#2f80c4',
-    successSurface: '#e3f1e8', successText: '#275f3f', dangerSurface: '#f7e6e5', dangerText: '#872f2c',
+    successSurface: '#e3f1e8', successText: '#275f3f', warningSurface: '#fff4d6', warningText: '#6b4e00', warningBorder: '#b7791f',
+    dangerSurface: '#f7e6e5', dangerText: '#872f2c',
   },
   dark: {
     canvas: '#101824', surface: '#172334', surfaceMuted: '#202f43', surfaceHover: '#273a51',
@@ -21,6 +22,7 @@ export const monoBlueTheme = {
     link: '#7fc2f0', linkHover: '#abdafa', focus: '#74bcec',
     action: '#326b9c', actionHover: '#2a5e8c', actionText: '#ffffff',
     selectedSurface: '#1d3c59', selectedText: '#d8edfc', selectedIndicator: '#63afe8',
-    successSurface: '#1d3929', successText: '#a6dcbc', dangerSurface: '#472422', dangerText: '#ffbeb8',
+    successSurface: '#1d3929', successText: '#a6dcbc', warningSurface: '#3d3215', warningText: '#f4d78c', warningBorder: '#d69e2e',
+    dangerSurface: '#472422', dangerText: '#ffbeb8',
   },
 } satisfies ThemeDefinition;

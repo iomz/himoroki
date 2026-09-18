@@ -11,7 +11,8 @@ export const hufflepuffTheme = {
     link: '#765100', linkHover: '#563a00', focus: '#8a6200',
     action: '#3d382e', actionHover: '#27241e', actionText: '#fff9e5',
     selectedSurface: '#f1dfa6', selectedText: '#4a3710', selectedIndicator: '#a67400',
-    successSurface: '#e8f0df', successText: '#3d5e2e', dangerSurface: '#f5e4df', dangerText: '#81372d',
+    successSurface: '#e8f0df', successText: '#3d5e2e', warningSurface: '#fff4d6', warningText: '#6b4e00', warningBorder: '#b7791f',
+    dangerSurface: '#f5e4df', dangerText: '#81372d',
   },
   dark: {
     canvas: '#171612', surface: '#211f19', surfaceMuted: '#2c291f', surfaceHover: '#353126',
@@ -21,6 +22,7 @@ export const hufflepuffTheme = {
     link: '#f3cf5a', linkHover: '#ffe38b', focus: '#f3cf5a',
     action: '#d6aa23', actionHover: '#efc13a', actionText: '#201900',
     selectedSurface: '#4a3c16', selectedText: '#ffedac', selectedIndicator: '#f1c84b',
-    successSurface: '#283a21', successText: '#b9dda6', dangerSurface: '#49241f', dangerText: '#ffc0b2',
+    successSurface: '#283a21', successText: '#b9dda6', warningSurface: '#3d3215', warningText: '#f4d78c', warningBorder: '#d69e2e',
+    dangerSurface: '#49241f', dangerText: '#ffc0b2',
   },
 } satisfies ThemeDefinition;

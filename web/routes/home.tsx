@@ -4,6 +4,7 @@ import { api, unwrap, assetPath } from '../api';
 import type { Asset, AssetPage } from '../../server/identity-store';
 import type { AssetScope } from '../../server/asset-page';
 import { Icon } from '../icon';
+import { ReporterAttribution } from '../reporter-attribution';
 import type { Route } from './+types/home';
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
@@ -92,7 +93,7 @@ function Inventory({ initial, q, scope }: { initial: AssetPage; q: string; scope
             <Thumbnail key={asset.photos[0]?.key ?? 'none'} asset={asset} />
             <div className="inventory-row-body"><strong>{asset.name}</strong>
               <span className="asset-identifier">{asset.identifier.scheme.toUpperCase()} · {asset.identifier.scheme === 'sgtin' ? `${asset.identifier.gtin} / ${asset.identifier.serial}` : asset.identifier.grai}</span>
-              <span className="asset-context"><Icon name="groups" /><span>{asset.groups.map((group) => group.name).join(', ')}</span><span className="context-divider">·</span><span>Reported by {asset.reportedBy.name}</span></span>
+              <span className="asset-context"><Icon name="groups" /><span>{asset.groups.map((group) => group.name).join(', ')}</span><span className="context-divider">·</span><span>Reported by <ReporterAttribution reporter={asset.reportedBy} /></span></span>
             </div>
               <span className={'badge ' + (asset.isPublic ? 'public' : '')}><Icon name={asset.isPublic ? 'globe' : 'lock'} />{asset.isPublic ? 'Public' : 'Group access'}</span>
           </Link>

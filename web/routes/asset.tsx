@@ -2,6 +2,7 @@ import { Form, Link, redirect, useNavigation } from 'react-router';
 import { displayInstant } from '../../server/settings.js';
 import { canonicalIdentifier } from '../../server/identity.js';
 import { api, unwrap, assetPath } from '../api';
+import { ReporterAttribution } from '../reporter-attribution';
 import type { Route } from './+types/asset';
 
 function identifierFrom(request: Request) {
@@ -47,7 +48,7 @@ export default function AssetPage({ loaderData: { asset, canEdit, settings }, ac
       <dt>Visibility</dt><dd>{asset.isPublic ? 'Public — read access' : 'Private — Group access'}</dd>
       <dt>Owner</dt><dd>{asset.owner?.name ?? 'Not specified'}</dd>
       <dt>Collaboration Groups</dt><dd>{asset.groups.map((g) => g.name).join(', ')}</dd>
-      <dt>Reported by</dt><dd>{asset.reportedBy.name}</dd>
+      <dt>Reported by</dt><dd><ReporterAttribution reporter={asset.reportedBy} /></dd>
       <dt>Reported at</dt><dd><time dateTime={asset.reportedAt}>{displayInstant(asset.reportedAt, settings.displayTimezone)}</time> ({settings.displayTimezone})</dd>
     </dl><p><Link to={assetPath(asset.identifier)}>Link to this Asset</Link></p></section>
     <section className="panel"><h2>Photos</h2>

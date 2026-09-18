@@ -8,7 +8,8 @@ import type { MailConfiguration, MailSecurity, PasswordAction } from '../../serv
 import type { Settings } from '../../server/settings';
 import { mailPasswordAction } from '../mail-form';
 import { useThemeRuntime } from '../theme-runtime';
-import type { Route } from './+types/administration';
+import { PasswordField } from '../password-field';
+import type { Route } from './+types/settings';
 
 export async function clientLoader() {
   const { user, isAdmin } = await unwrap(await api.me.$get());
@@ -140,27 +141,30 @@ function MailSettings({ mail }: { mail: MailConfiguration }) {
           <label>SMTP username<input name={removePassword ? undefined : 'smtpUsername'} value={smtpUsername}
             disabled={removePassword} maxLength={320} autoComplete="username"
             onChange={(event) => setSmtpUsername(event.currentTarget.value)} /></label>
-          <fieldset className="credential-field"><legend>SMTP password</legend>
+          <fieldset className="credential-field"><legend className="sr-only">SMTP password</legend>
+            <div className="credential-heading">
+              <label id="smtp-password-label" htmlFor="smtp-password">SMTP password</label>
+            </div>
             {mail.passwordState === 'configured' && !removePassword
-              ? <p id="smtp-password-help" className="hint">Configured. Leave blank to keep current password.</p>
+              ? <div className="credential-context"><p id="smtp-password-help" className="hint">Configured. Leave blank to keep current password.</p>
+                <button type="button" className="credential-remove" onClick={() => {
+                  setRemovePassword(true); setSmtpPassword(''); setDirty(true);
+                }}>Remove password</button></div>
               : mail.passwordState === 'unavailable'
                 ? <p id="smtp-password-help" className="hint">Unavailable — instance master-key recovery is required.</p>
                 : removePassword
-                  ? <p id="smtp-password-help" className="hint">Password and username will be removed when saved.</p>
+                  ? <div className="credential-context"><p id="smtp-password-help" className="hint">Password and username will be removed when saved.</p>
+                    <button type="button" className="credential-remove" onClick={() => {
+                      setRemovePassword(false); setDirty(true);
+                    }}>Undo password removal</button></div>
                   : null}
-            <label>SMTP password<input name="smtpPassword" type="password" value={smtpPassword}
+            <div className="credential-password-input"><PasswordField id="smtp-password" label="SMTP password"
+              aria-labelledby="smtp-password-label" name="smtpPassword" value={smtpPassword}
               maxLength={1024} autoComplete="new-password"
               aria-describedby={mail.passwordState !== 'none' || removePassword ? 'smtp-password-help' : undefined}
               placeholder={mail.passwordState === 'configured' && !removePassword ? 'Leave blank to keep current password' : ''}
               disabled={removePassword || mail.passwordState === 'unavailable'}
-              onChange={(event) => { setSmtpPassword(event.currentTarget.value); setRemovePassword(false); }} /></label>
-            {mail.passwordState === 'configured' && !removePassword
-              ? <button type="button" className="credential-remove" onClick={() => {
-                setRemovePassword(true); setSmtpPassword(''); setDirty(true);
-              }}>Remove password</button>
-              : removePassword ? <button type="button" className="credential-remove" onClick={() => {
-                setRemovePassword(false); setDirty(true);
-              }}>Undo password removal</button> : null}
+              onChange={(event) => { setSmtpPassword(event.currentTarget.value); setRemovePassword(false); }} /></div>
           </fieldset>
         </div>}
         <div className="grid">
@@ -234,7 +238,7 @@ export default function Administration({ loaderData: { settings, mail } }: Route
     setCurrent(next);
     if (change.themeId) setThemeId(next.themeId);
     void fetcher.submit({ intent: 'settings', requirePhoto: next.requirePhoto ? 'on' : '', displayTimezone: next.displayTimezone,
-      themeId: next.themeId }, { method: 'post', action: '/administration' });
+      themeId: next.themeId }, { method: 'post', action: '/admin/settings' });
   }
   function preview(mode: 'light' | 'dark') {
     setPreviewMode(mode);

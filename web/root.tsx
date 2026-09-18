@@ -84,7 +84,7 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
         <p className="nav-label">Workspace</p>
         <Link to="/" aria-current={assetsActive ? 'page' : undefined} className={assetsActive ? 'active' : ''}><Icon name="assets" />Assets</Link>
         <NavLink to="/groups"><Icon name="groups" />Groups</NavLink>
-        {isAdmin && <><p className="nav-label admin-label">Administration</p><NavLink to="/administration/members"><Icon name="members" />Members</NavLink><NavLink to="/administration" end><Icon name="settings" />Settings</NavLink></>}
+        {isAdmin && <><p className="nav-label admin-label">Administration</p><NavLink to="/admin/members"><Icon name="members" />Members</NavLink><NavLink to="/admin/settings"><Icon name="settings" />Settings</NavLink></>}
       </nav>
       <p className="sidebar-note">A place for things.<br />Context that stays.</p>
     </aside>

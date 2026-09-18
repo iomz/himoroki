@@ -11,7 +11,8 @@ export const christmasTheme = {
     link: '#1e6541', linkHover: '#154b30', focus: '#9d2d2d',
     action: '#20643f', actionHover: '#174c30', actionText: '#ffffff',
     selectedSurface: '#f1dddd', selectedText: '#762424', selectedIndicator: '#bd3434',
-    successSurface: '#e1eee4', successText: '#2b613c', dangerSurface: '#f3dede', dangerText: '#7d2525',
+    successSurface: '#e1eee4', successText: '#2b613c', warningSurface: '#fff4d6', warningText: '#6b4e00', warningBorder: '#b7791f',
+    dangerSurface: '#f3dede', dangerText: '#7d2525',
   },
   dark: {
     canvas: '#121a15', surface: '#1a251e', surfaceMuted: '#243129', surfaceHover: '#2c3c32',
@@ -21,6 +22,7 @@ export const christmasTheme = {
     link: '#78d39b', linkHover: '#a4e4bc', focus: '#ef7373',
     action: '#287a4a', actionHover: '#226b41', actionText: '#ffffff',
     selectedSurface: '#51282a', selectedText: '#ffd1d1', selectedIndicator: '#e15a5a',
-    successSurface: '#1d3d2a', successText: '#a5dfb8', dangerSurface: '#4b2526', dangerText: '#ffc0c0',
+    successSurface: '#1d3d2a', successText: '#a5dfb8', warningSurface: '#3d3215', warningText: '#f4d78c', warningBorder: '#d69e2e',
+    dangerSurface: '#4b2526', dangerText: '#ffc0c0',
   },
 } satisfies ThemeDefinition;

@@ -37,7 +37,7 @@ test('Neo4j identity integrity', { skip: !uri || !password }, async (t) => {
     const asset = await store.reportAsset({ name: '  Oscilloscope  ', identifiers: [sgtin('001')], ownerKey: owner.key }, context);
     assert.equal(asset.name, 'Oscilloscope');
     assert.deepEqual(asset.identifier, { scheme: 'sgtin', gtin: '00614141123452', serial: '001' });
-    assert.deepEqual(asset.reportedBy, user);
+    assert.deepEqual(asset.reportedBy, { ...user, status: 'active' });
     assert.deepEqual(asset.owner, owner);
     assert.deepEqual(asset.groups, [group]);
     assert.equal(asset.isPublic, false);

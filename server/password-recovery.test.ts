@@ -28,6 +28,13 @@ test('reset links use canonical origin and keep token in fragment', () => {
   assert.match(message.text, /expires in one hour and can be used only once/);
   assert.match(message.text, /ignore this email/);
   assert.match(message.text, /password will remain unchanged/);
+  const setup = passwordResetMessage('https://himoroki.example', 'new@example.com', 'setup-token', 'setup');
+  assert.equal(setup.subject, 'Set up your Himoroki account');
+  assert.match(setup.text, /An account has been created for you on Himoroki/);
+  assert.match(setup.text, /set your password and finish setting up your account/);
+  assert.match(setup.text, /expires in one hour and can be used only once/);
+  assert.match(setup.text, /weren't expecting this account/);
+  assert.ok(!setup.text.includes('request to reset'));
 });
 
 test('mail dispatch is asynchronous and reports only safe failure category', async () => {

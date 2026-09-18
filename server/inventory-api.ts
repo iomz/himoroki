@@ -20,6 +20,13 @@ function actor(user: User | null) {
   return user.key;
 }
 
+function memberAuthError(error: unknown, fallback: string): never {
+  if (!isAPIError(error)) throw error;
+  if (error.statusCode === 401) throw new HTTPException(401, { message: 'Sign in required' });
+  if (error.statusCode === 403) throw new AdministrationError('Administrator access required');
+  throw new HTTPException(error.statusCode === 409 ? 409 : 400, { message: fallback });
+}
+
 export function createInventoryApi(store: IdentityStore, auth: Auth, origin: string, media?: MediaService, mail?: MailService) {
   return new Hono<Env>()
     .use('*', async (c, next) => {
@@ -40,7 +47,11 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       await next();
     })
     .get('/me', async (c) => c.json({ user: c.get('user'), ...await store.accountState(c.get('user')?.key ?? null) }))
-    .get('/profile', async (c) => c.json({ member: await store.profile(actor(c.get('user'))) }))
+    .get('/profile', async (c) => {
+      const key = actor(c.get('user'));
+      const [member, deletionBlocked] = await Promise.all([store.profile(key), store.ownDeletionBlocked(key)]);
+      return c.json({ member, deletionBlocked });
+    })
     .patch('/profile', validator('json', (value) => record(value, ['name']) as { name: string }), async (c) => {
       const key = actor(c.get('user'));
       const name = requiredText(c.req.valid('json').name, 'name');
@@ -80,8 +91,67 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
     })
     .patch('/profile/appearance', async (c) =>
       c.json({ appearance: await store.updateAppearance(actor(c.get('user')), await c.req.json()) }))
+    .delete('/profile', async (c) => {
+      await store.deactivateOwnAccount(actor(c.get('user')));
+      return c.json({ deleted: true });
+    })
     .get('/members', async (c) => c.json({ members: await store.members(actor(c.get('user'))) }))
-    .patch('/members/:key', validator('json', (value) => record(value, ['name', 'isAdmin']) as { name: string; isAdmin: boolean }), async (c) => c.json({ member: await store.updateMember(actor(c.get('user')), c.req.param('key'), c.req.valid('json')) }))
+    .post('/members', validator('json', (value) => {
+      const input = record(value, ['name', 'email', 'isAdmin']);
+      if (typeof input.email !== 'string' || typeof input.isAdmin !== 'boolean') {
+        throw new ValidationError('Name, email, and administrator status are required');
+      }
+      return { name: requiredText(input.name, 'name'), email: input.email, isAdmin: input.isAdmin };
+    }), async (c) => {
+      const input = c.req.valid('json');
+      try {
+        const created = await auth.api.createUser({ headers: c.req.raw.headers, body: {
+          name: input.name, email: input.email, role: input.isAdmin ? 'admin' : 'user',
+        } });
+        await auth.api.requestPasswordReset({ body: { email: created.user.email } });
+        const createdUser = created.user as typeof created.user & { key: string };
+        return c.json({ member: await store.profile(createdUser.key), recoveryRequested: true }, 201);
+      } catch (error) { memberAuthError(error, 'Member could not be created'); }
+    })
+    .patch('/members/:key', validator('json', (value) => {
+      const input = record(value, ['name', 'email']);
+      if (typeof input.email !== 'string') throw new ValidationError('Email is required');
+      return { name: requiredText(input.name, 'name'), email: input.email };
+    }), async (c) => {
+      const actorKey = actor(c.get('user'));
+      const target = await store.memberAccount(actorKey, c.req.param('key'));
+      const normalizedEmail = c.req.valid('json').email.trim().toLowerCase();
+      if (target.key === actorKey && normalizedEmail !== target.email) {
+        throw new HTTPException(409, { message: 'Change your own email from Profile' });
+      }
+      try {
+        await auth.api.adminUpdateUser({ headers: c.req.raw.headers, body: { userId: target.id, data: {
+          name: c.req.valid('json').name,
+          ...(normalizedEmail !== target.email ? { email: normalizedEmail, emailVerified: false } : {}),
+        } } });
+        if (normalizedEmail !== target.email) {
+          await auth.api.revokeUserSessions({ headers: c.req.raw.headers, body: { userId: target.id } });
+        }
+        return c.json({ member: await store.profile(target.key) });
+      } catch (error) { memberAuthError(error, 'Member could not be updated'); }
+    })
+    .patch('/members/:key/role', validator('json', (value) => {
+      const input = record(value, ['isAdmin']);
+      if (typeof input.isAdmin !== 'boolean') throw new ValidationError('Administrator status must be a boolean');
+      return { isAdmin: input.isAdmin };
+    }), async (c) => c.json({ member: await store.updateMemberRole(actor(c.get('user')),
+      c.req.param('key'), c.req.valid('json').isAdmin) }))
+    .post('/members/:key/recovery', async (c) => {
+      const target = await store.memberAccount(actor(c.get('user')), c.req.param('key'));
+      try {
+        await auth.api.requestPasswordReset({ body: { email: target.email } });
+        return c.json({ requested: true });
+      } catch (error) { memberAuthError(error, 'Recovery email could not be requested'); }
+    })
+    .delete('/members/:key', async (c) => {
+      await store.deactivateMember(actor(c.get('user')), c.req.param('key'));
+      return c.json({ deleted: true });
+    })
     .get('/settings', async (c) => c.json({ settings: await store.settings() }))
     .patch('/settings', async (c) => c.json({ settings: await store.updateSettings(actor(c.get('user')), await c.req.json()) }))
     .get('/admin/mail', async (c) => {
@@ -137,8 +207,8 @@ export function createInventoryApi(store: IdentityStore, auth: Auth, origin: str
       const input = record(value, ['userKey']);
       return { userKey: requiredText(input.userKey, 'userKey') };
     }), async (c) => {
-      await store.addGroupMember(actor(c.get('user')), c.req.param('key'), c.req.valid('json').userKey);
-      return c.json({ ok: true });
+      const added = await store.addGroupMember(actor(c.get('user')), c.req.param('key'), c.req.valid('json').userKey);
+      return c.json({ ok: true, added });
     })
     .delete('/groups/:key/membership', async (c) => {
       await store.leaveGroup(actor(c.get('user')), c.req.param('key'));

@@ -23,7 +23,7 @@ test('built-in themes provide complete paired palettes with readable semantic co
     ['text', 'surface'], ['textMuted', 'surface'], ['chromeText', 'chrome'], ['chromeMuted', 'chrome'],
     ['accentText', 'accentSoft'], ['link', 'surface'], ['linkHover', 'surface'],
     ['actionText', 'action'], ['actionText', 'actionHover'], ['selectedText', 'selectedSurface'],
-    ['successText', 'successSurface'], ['dangerText', 'dangerSurface'],
+    ['successText', 'successSurface'], ['warningText', 'warningSurface'], ['dangerText', 'dangerSurface'],
   ] as const;
 
   for (const theme of builtInThemes) for (const mode of ['light', 'dark'] as const) {
@@ -44,4 +44,5 @@ test('generated theme stylesheet covers every built-in light and dark palette', 
   }
   assert.equal((css.match(/--color-canvas:/g) ?? []).length, themeIds.length * 2);
   assert.equal((css.match(/--color-danger-text:/g) ?? []).length, themeIds.length * 2);
+  assert.equal((css.match(/--color-warning-text:/g) ?? []).length, themeIds.length * 2);
 });

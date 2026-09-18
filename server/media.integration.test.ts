@@ -51,7 +51,7 @@ test('S3 media, policy and administration', { skip: !uri || !password || !proces
     const change = JSON.stringify({ requirePhoto: true, displayTimezone: 'Asia/Tokyo', themeId: 'mono-blue' });
     assert.equal((await request('/settings', 'PATCH', change)).status, 404);
     assert.equal((await request('/settings', 'PATCH', change, false)).status, 401);
-    await query('MATCH (u:User {key: $key}) SET u.isAdmin = true', { key: user.key });
+    await query("MATCH (u:User {key: $key}) SET u.role = 'admin'", { key: user.key });
     assert.equal((await request('/settings', 'PATCH', change)).status, 200);
     assert.deepEqual(await store.settings(), { requirePhoto: true, displayTimezone: 'Asia/Tokyo', themeId: 'mono-blue' });
     assert.equal((await request('/settings', 'PATCH', JSON.stringify({ requirePhoto: false, displayTimezone: 'unknown', themeId: 'default' }))).status, 400);

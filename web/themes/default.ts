@@ -11,7 +11,8 @@ export const defaultTheme = {
     link: '#176c83', linkHover: '#105368', focus: '#176c83',
     action: '#245f6c', actionHover: '#194b57', actionText: '#ffffff',
     selectedSurface: '#dceef1', selectedText: '#134f60', selectedIndicator: '#168ca4',
-    successSurface: '#e4f1e8', successText: '#25613e', dangerSurface: '#f8e7e5', dangerText: '#8a2f2b',
+    successSurface: '#e4f1e8', successText: '#25613e', warningSurface: '#fff4d6', warningText: '#6b4e00', warningBorder: '#b7791f',
+    dangerSurface: '#f8e7e5', dangerText: '#8a2f2b',
   },
   dark: {
     canvas: '#151b1d', surface: '#1d2629', surfaceMuted: '#263236', surfaceHover: '#2b383c',
@@ -21,6 +22,7 @@ export const defaultTheme = {
     link: '#73d3e2', linkHover: '#a5e8f1', focus: '#62d5e7',
     action: '#347c89', actionHover: '#2f727e', actionText: '#ffffff',
     selectedSurface: '#25434a', selectedText: '#d6f4f8', selectedIndicator: '#57c9dc',
-    successSurface: '#1e3b2b', successText: '#a9dfbd', dangerSurface: '#482522', dangerText: '#ffc1ba',
+    successSurface: '#1e3b2b', successText: '#a9dfbd', warningSurface: '#3d3215', warningText: '#f4d78c', warningBorder: '#d69e2e',
+    dangerSurface: '#482522', dangerText: '#ffc1ba',
   },
 } satisfies ThemeDefinition;

@@ -98,7 +98,12 @@ test('local authentication and Group authorization', { skip: !uri || !password }
     const created = await reporter.request('/groups', 'POST', { name: 'Team' });
     assert.equal(created.status, 201);
     groupKey = (await created.json()).group.key;
-    assert.equal((await reporter.request(`/groups/${groupKey}/members`, 'POST', { userKey: people[1].key })).status, 200);
+    const added = await reporter.request(`/groups/${groupKey}/members`, 'POST', { userKey: people[1].key });
+    assert.equal(added.status, 200);
+    assert.equal((await added.json()).added, true);
+    const existing = await reporter.request(`/groups/${groupKey}/members`, 'POST', { userKey: people[1].key });
+    assert.equal(existing.status, 200);
+    assert.equal((await existing.json()).added, false);
     assert.equal((await stranger.request(`/groups/${groupKey}/members`, 'POST', { userKey: people[2].key })).status, 404);
     const input = { name: 'Oscilloscope', identifiers: [identifier], groupKey };
     assert.equal((await stranger.request('/assets', 'POST', input)).status, 404);
@@ -106,7 +111,7 @@ test('local authentication and Group authorization', { skip: !uri || !password }
     const reported = await reporter.request('/assets', 'POST', input);
     assert.equal(reported.status, 201, await reported.clone().text());
     const { asset } = await reported.json();
-    assert.deepEqual(asset.reportedBy, people[0]);
+    assert.deepEqual(asset.reportedBy, { ...people[0], status: 'active' });
     assert.equal(asset.groups[0].key, groupKey);
     assert.equal(asset.isPublic, false);
     reportedAt = asset.reportedAt;
@@ -149,7 +154,7 @@ test('local authentication and Group authorization', { skip: !uri || !password }
     assert.equal((await reporter.request('/asset?' + query, 'PATCH', { name: 'Denied' })).status, 404);
     const response = await member.request('/asset?' + query);
     const { asset } = await response.json();
-    assert.deepEqual(asset.reportedBy, people[0]);
+    assert.deepEqual(asset.reportedBy, { ...people[0], status: 'active' });
     assert.equal(asset.reportedAt, reportedAt);
     assert.equal(asset.name, 'Bench instrument');
     assert.equal((await (await reporter.request('/assets')).json()).assets.length, 0);

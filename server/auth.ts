@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { betterAuth } from 'better-auth';
 import { APIError } from 'better-auth/api';
+import { admin } from 'better-auth/plugins';
 import { getAuthTables } from 'better-auth/db';
 import { neo4jAdapter, buildSchemaStatements } from 'neo4j-better-auth';
 import type { Driver } from 'neo4j-driver';
@@ -23,8 +24,8 @@ export async function createAuth(driver: Driver, baseURL: string, secret: string
       minPasswordLength: 12,
       resetPasswordTokenExpiresIn: 3600,
       revokeSessionsOnPasswordReset: true,
-      ...(mailer ? { sendResetPassword: async ({ user, token }: { user: { email: string }; token: string }) => {
-        queuePasswordResetEmail(mailer, origin, user.email, token);
+      ...(mailer ? { sendResetPassword: async ({ user, token }: { user: { id: string; email: string }; token: string }) => {
+        queuePasswordResetEmail(mailer, origin, user.email, token, await recovery.intentForUser(user.id));
       } } : {}),
       onPasswordReset: async ({ user }) => {
         await invalidateOutstandingResetTokens(recovery, user.id);
@@ -61,6 +62,7 @@ export async function createAuth(driver: Driver, baseURL: string, secret: string
       } } },
     },
     rateLimit: { enabled: true },
+    plugins: [admin()],
   });
   const tables = getAuthTables(auth.options);
   const session = driver.session();

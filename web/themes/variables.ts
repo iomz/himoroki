@@ -30,6 +30,9 @@ export function paletteVariableEntries(palette: ThemePalette): [string, string][
     '--color-selected-indicator': palette.selectedIndicator,
     '--color-success-surface': palette.successSurface,
     '--color-success-text': palette.successText,
+    '--color-warning-surface': palette.warningSurface,
+    '--color-warning-text': palette.warningText,
+    '--color-warning-border': palette.warningBorder,
     '--color-danger-surface': palette.dangerSurface,
     '--color-danger-text': palette.dangerText,
   });
