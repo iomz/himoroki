@@ -3,6 +3,9 @@ import { useLayoutEffect, useState, type FormEvent } from 'react';
 import { authClient } from '../api';
 import { isInvalidResetError, resetTokenFromHash } from '../password-recovery';
 import { PasswordField } from '../password-field';
+import { anonymousShellHandle } from '../anonymous-shell';
+
+export const handle = anonymousShellHandle;
 
 type ResetState = 'loading' | 'form' | 'invalid' | 'success';
 

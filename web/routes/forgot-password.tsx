@@ -1,6 +1,9 @@
 import { Link } from 'react-router';
 import { useState, type FormEvent } from 'react';
 import { authClient } from '../api';
+import { anonymousShellHandle } from '../anonymous-shell';
+
+export const handle = anonymousShellHandle;
 
 export default function ForgotPassword() {
   const [busy, setBusy] = useState(false);

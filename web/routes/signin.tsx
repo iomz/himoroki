@@ -2,6 +2,9 @@ import { Form, Link, redirect, useLocation, useNavigation } from 'react-router';
 import { api, authClient, unwrap } from '../api';
 import { PasswordField } from '../password-field';
 import type { Route } from './+types/signin';
+import { anonymousShellHandle } from '../anonymous-shell';
+
+export const handle = anonymousShellHandle;
 
 export async function clientLoader() {
   if ((await unwrap(await api.me.$get())).user) throw redirect('/');

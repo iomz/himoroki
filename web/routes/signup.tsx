@@ -1,1 +1,1 @@
-export { clientLoader, clientAction, default, ErrorBoundary } from './signin';
+export { clientLoader, clientAction, handle, default, ErrorBoundary } from './signin';

@@ -1,4 +1,4 @@
-import { Form, Link, Links, Meta, NavLink, Outlet, Scripts, ScrollRestoration, redirect, useLocation, useNavigation } from 'react-router';
+import { Form, Link, Links, Meta, NavLink, Outlet, Scripts, ScrollRestoration, redirect, useLocation, useMatches, useNavigation } from 'react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, authClient, unwrap } from './api';
 import type { Route } from './+types/root';
@@ -8,6 +8,7 @@ import { builtInThemes, themeById } from './themes';
 import { themeStylesheet } from './themes/variables';
 import { applyDocumentTheme, cacheInstanceTheme, themeBootScript, useResolvedAppearance } from './appearance';
 import { ThemeRuntimeContext } from './theme-runtime';
+import { AnonymousShell, isAnonymousShellHandle } from './anonymous-shell';
 
 export async function clientLoader() {
   const [account, { settings }] = await Promise.all([
@@ -33,6 +34,7 @@ export { WorkspaceError as ErrorBoundary } from './route-error';
 export default function App({ loaderData, actionData }: Route.ComponentProps) {
   const { user, isAdmin } = loaderData;
   const location = useLocation();
+  const anonymousShell = useMatches().some((match) => isAnonymousShellHandle(match.handle));
   const busy = useNavigation().state !== 'idle';
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeId, setThemeId] = useState(loaderData.themeId);
@@ -52,7 +54,6 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
   }, [user]);
   useEffect(() => setThemeId(loaderData.themeId), [loaderData.themeId]);
   useEffect(() => setAppearance(loaderData.appearance), [loaderData.appearance]);
-  const authPage = ['/signin', '/signup', '/forgot-password', '/reset-password'].includes(location.pathname);
   const assetsActive = location.pathname === '/' || location.pathname === '/asset' || location.pathname.startsWith('/assets/');
   const theme = themeById(themeId);
   const resolvedAppearance = useResolvedAppearance(appearance);
@@ -61,18 +62,8 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
   useEffect(() => cacheInstanceTheme(theme.id), [theme.id]);
   return <ThemeRuntimeContext.Provider value={{ themeId, setThemeId, appearance, setAppearance,
     colorScheme, setColorSchemePreview }}>
-    {authPage ? <div className="auth-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
-      <a className="skip-link" href="#workspace">Skip to content</a>
-      <main id="workspace" tabIndex={-1} className="auth-main" aria-busy={busy}>
-        <div className="auth-composition">
-          <Link to="/signin" className="auth-brand" aria-label="Kannabi sign in">
-            <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M5 27V9h6v18M21 27V9h6v18M11 5h10v6H11z" fill="currentColor" /></svg>
-            <span>Kannabi<small>Identity & inventory</small></span>
-          </Link>
-          {actionData?.error && <p role="alert">{actionData.error}</p>}<Outlet />
-        </div>
-      </main>
-    </div> : <div className="app-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
+    {anonymousShell ? <AnonymousShell themeId={theme.id} colorScheme={colorScheme} busy={busy} error={actionData?.error} />
+      : <div className="app-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
     <a className="skip-link" href="#workspace">Skip to content</a>
     <aside className="sidebar">
       <Link to="/" className="brand" onClick={() => setMenuOpen(false)} aria-label="Kannabi home">
