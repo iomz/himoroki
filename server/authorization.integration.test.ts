@@ -7,8 +7,8 @@ import { createAuth } from './auth.js';
 import { IdentityStore } from './identity-store.js';
 import { createInventoryApi } from './inventory-api.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const password = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 test('local authentication and Group authorization', { skip: !uri || !password }, async (t) => {
   const driver = neo4j.driver(uri!, neo4j.auth.basic('neo4j', password!));
   t.after(() => driver.close());
@@ -26,7 +26,7 @@ test('local authentication and Group authorization', { skip: !uri || !password }
       cookie: () => cookie,
       async request(path: string, method = 'GET', body?: unknown, requestOrigin = origin) {
         const response = await app.request(origin + '/api' + path, {
-          method, headers: { Origin: requestOrigin, Cookie: cookie, 'Content-Type': 'application/json', 'x-himoroki-client-ip': peer },
+          method, headers: { Origin: requestOrigin, Cookie: cookie, 'Content-Type': 'application/json', 'x-kannabi-client-ip': peer },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
         const cookies = response.headers.getSetCookie();

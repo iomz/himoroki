@@ -23,8 +23,8 @@ export function passwordResetMessage(baseURL: string, recipient: string, token: 
   const url = passwordResetURL(baseURL, token);
   if (intent === 'setup') return {
     to: recipient,
-    subject: 'Set up your Himoroki account',
-    text: `An account has been created for you on Himoroki.
+    subject: 'Set up your Kannabi account',
+    text: `An account has been created for you on Kannabi.
 
 Open this link to set your password and finish setting up your account:
 ${url}
@@ -35,8 +35,8 @@ If you weren't expecting this account, you can ignore this email.`,
   };
   return {
     to: recipient,
-    subject: 'Reset your Himoroki password',
-    text: `We received a request to reset the password for your Himoroki account.
+    subject: 'Reset your Kannabi password',
+    text: `We received a request to reset the password for your Kannabi account.
 
 Open this link to choose a new password:
 ${url}

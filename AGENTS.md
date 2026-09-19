@@ -2,6 +2,9 @@
 
 Preserve the README naming story at the bottom of README.
 
+- Use `Kannabi` for the product/brand and user-facing name.
+- Use lowercase `kannabi` for technical identifiers such as repository, package/binary, and filesystem names.
+- Use uppercase `KANNABI_*` for environment variables.
 - Reporting requires an explicit Group context; that Group receives collaboration access.
 - A sole Group may be selected automatically in the UI, but remains explicit in the API/domain.
 - `reportedBy` is immutable provenance, never an authorization grant.

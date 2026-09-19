@@ -8,8 +8,8 @@ import { IdentityStore } from './identity-store.js';
 import { createInventoryApi } from './inventory-api.js';
 import type { Mailer, MailMessage } from './mail.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const databasePassword = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const databasePassword = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 
 class CaptureMailer implements Mailer {
   readonly messages: MailMessage[] = [];
@@ -38,7 +38,7 @@ test('self-service email change uses password step-up and becomes recovery ident
       return async (path: string, method = 'GET', body?: unknown) => {
         const response = await app.request(origin + '/api' + path, { method,
           headers: { Origin: origin, Cookie: cookie, 'Content-Type': 'application/json',
-            'x-himoroki-client-ip': peer },
+            'x-kannabi-client-ip': peer },
           body: body === undefined ? undefined : JSON.stringify(body) });
         if (response.headers.getSetCookie().length) cookie = response.headers.getSetCookie()
           .map((value) => value.split(';')[0]).join('; ');

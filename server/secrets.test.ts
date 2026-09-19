@@ -8,7 +8,7 @@ import { AesGcmSecretStore, applicationDataDirectory, MasterKeyManager, SecretEn
   SecretUnavailableError } from './secrets.js';
 
 function directory(t: TestContext) {
-  const path = mkdtempSync(join(tmpdir(), 'himoroki-secrets-'));
+  const path = mkdtempSync(join(tmpdir(), 'kannabi-secrets-'));
   t.after(() => rmSync(path, { recursive: true, force: true }));
   return path;
 }
@@ -32,7 +32,7 @@ test('AES-GCM envelopes round trip, randomize nonces, bind purpose, and reject t
 
 test('managed master key is generated privately and reused across restarts', async (t) => {
   const data = directory(t);
-  const env = { HIMOROKI_DATA_DIR: data };
+  const env = { KANNABI_DATA_DIR: data };
   const first = await MasterKeyManager.open(false, env);
   assert.equal(first.state, 'ready');
   assert.equal(first.source, 'file');
@@ -50,11 +50,11 @@ test('managed master key is generated privately and reused across restarts', asy
 test('external key has strict encoding and never creates managed data', async (t) => {
   const data = directory(t);
   const encoded = randomBytes(32).toString('base64url');
-  const manager = await MasterKeyManager.open(false, { HIMOROKI_DATA_DIR: data, HIMOROKI_SECRET_KEY: encoded });
+  const manager = await MasterKeyManager.open(false, { KANNABI_DATA_DIR: data, KANNABI_SECRET_KEY: encoded });
   assert.equal(manager.source, 'environment');
   assert.equal(manager.state, 'ready');
   assert.throws(() => manager.secretStore().decrypt('secret:v1:bad', 'smtp-password'));
-  await assert.rejects(MasterKeyManager.open(false, { HIMOROKI_SECRET_KEY: 'too-short' }),
+  await assert.rejects(MasterKeyManager.open(false, { KANNABI_SECRET_KEY: 'too-short' }),
     /exactly 32 bytes/);
   assert.equal(statSync(data).isDirectory(), true);
   assert.throws(() => statSync(join(data, 'master.key')));
@@ -62,7 +62,7 @@ test('external key has strict encoding and never creates managed data', async (t
 
 test('missing or invalid managed key with ciphertext remains unavailable until explicit reset', async (t) => {
   const data = directory(t);
-  const env = { HIMOROKI_DATA_DIR: data };
+  const env = { KANNABI_DATA_DIR: data };
   const missing = await MasterKeyManager.open(true, env);
   assert.equal(missing.state, 'missing');
   assert.throws(() => missing.secretStore(), SecretUnavailableError);
@@ -83,7 +83,7 @@ test('managed key rejects symlinks and failed reset preserves missing state', { 
   const target = join(data, 'target');
   writeFileSync(target, randomBytes(32).toString('base64url') + '\n', { mode: 0o600 });
   symlinkSync(target, join(data, 'master.key'));
-  const manager = await MasterKeyManager.open(true, { HIMOROKI_DATA_DIR: data });
+  const manager = await MasterKeyManager.open(true, { KANNABI_DATA_DIR: data });
   assert.equal(manager.state, 'invalid');
   await assert.rejects(manager.reset(async () => { throw new Error('database failed'); }), /database failed/);
   assert.equal(manager.state, 'invalid');
@@ -91,8 +91,8 @@ test('managed key rejects symlinks and failed reset preserves missing state', { 
 });
 
 test('application data defaults follow platform conventions', () => {
-  assert.equal(applicationDataDirectory({}, 'linux', '/home/example'), '/home/example/.local/share/himoroki');
-  assert.equal(applicationDataDirectory({ XDG_DATA_HOME: '/data' }, 'linux', '/home/example'), '/data/himoroki');
-  assert.equal(applicationDataDirectory({}, 'darwin', '/Users/example'), '/Users/example/Library/Application Support/Himoroki');
-  assert.equal(applicationDataDirectory({ LOCALAPPDATA: 'C:\\Data' }, 'win32', 'C:\\Users\\example'), 'C:\\Data/Himoroki');
+  assert.equal(applicationDataDirectory({}, 'linux', '/home/example'), '/home/example/.local/share/kannabi');
+  assert.equal(applicationDataDirectory({ XDG_DATA_HOME: '/data' }, 'linux', '/home/example'), '/data/kannabi');
+  assert.equal(applicationDataDirectory({}, 'darwin', '/Users/example'), '/Users/example/Library/Application Support/Kannabi');
+  assert.equal(applicationDataDirectory({ LOCALAPPDATA: 'C:\\Data' }, 'win32', 'C:\\Users\\example'), 'C:\\Data/Kannabi');
 });

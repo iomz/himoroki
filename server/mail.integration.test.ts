@@ -13,17 +13,17 @@ import { createInventoryApi } from './inventory-api.js';
 import { MailService } from './mail.js';
 import { MasterKeyManager } from './secrets.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const password = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 
 test('mail configuration, authorization, encrypted persistence, recovery, and SMTP delivery',
   { skip: !uri || !password }, async (t) => {
     const driver = neo4j.driver(uri!, neo4j.auth.basic('neo4j', password!));
     t.after(() => driver.close());
-    const data = mkdtempSync(join(tmpdir(), 'himoroki-mail-integration-'));
+    const data = mkdtempSync(join(tmpdir(), 'kannabi-mail-integration-'));
     t.after(() => rmSync(data, { recursive: true, force: true }));
     const store = await IdentityStore.open(driver);
-    const keyManager = await MasterKeyManager.open(await store.hasEncryptedSecrets(), { HIMOROKI_DATA_DIR: data });
+    const keyManager = await MasterKeyManager.open(await store.hasEncryptedSecrets(), { KANNABI_DATA_DIR: data });
     const mail = new MailService(store, keyManager);
     const origin = 'http://localhost:3000';
     const auth = await createAuth(driver, origin, randomBytes(32).toString('hex'), mail);
@@ -34,7 +34,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
       return async (path: string, method = 'GET', body?: unknown) => {
         const response = await app.request(origin + '/api' + path, { method,
           headers: { Origin: origin, Cookie: cookies.get(peer) ?? '', 'Content-Type': 'application/json',
-            'x-himoroki-client-ip': `192.0.2.${peer}` },
+            'x-kannabi-client-ip': `192.0.2.${peer}` },
           body: body === undefined ? undefined : JSON.stringify(body) });
         if (response.headers.getSetCookie().length) cookies.set(peer,
           response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; '));
@@ -81,7 +81,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
     await t.test('saved configuration drives real test delivery through Mailer', async () => {
       const update = await admin('/admin/mail', 'PUT', { revision: 0, enabled: true, transport: 'smtp',
         smtpHost: '127.0.0.1', smtpPort: address.port, smtpSecurity: 'none', smtpUsername: '',
-        senderAddress: 'himoroki@example.com', senderName: 'Himoroki', password: { action: 'clear' } });
+        senderAddress: 'kannabi@example.com', senderName: 'Kannabi', password: { action: 'clear' } });
       assert.equal(update.status, 200, await update.clone().text());
       const configured = (await update.json()).configuration;
       assert.equal(configured.operationalState, 'configured');
@@ -90,7 +90,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
       assert.equal((await member('/admin/mail/test', 'POST', { recipient: 'recipient@example.com' })).status, 403);
       const sent = await admin('/admin/mail/test', 'POST', { recipient: 'recipient@example.com' });
       assert.equal(sent.status, 200, await sent.clone().text());
-      assert.match(received, /Subject: Himoroki mail delivery test/);
+      assert.match(received, /Subject: Kannabi mail delivery test/);
       assert.match(received, /To: recipient@example.com/);
       assert.ok(!received.includes('test-password-12345'));
       const observed = (await (await admin('/admin/mail')).json()).configuration;
@@ -106,7 +106,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       const unfolded = received.replace(/=\r?\n/g, '');
-      assert.match(unfolded, /Subject: Reset your Himoroki password/);
+      assert.match(unfolded, /Subject: Reset your Kannabi password/);
       assert.match(unfolded, /\/reset-password#token=3D[A-Za-z0-9]/);
       assert.ok(!unfolded.includes('test-password-12345'));
     });
@@ -115,7 +115,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
     await t.test('authenticated password is encrypted, preserved explicitly, and survives restart', async () => {
       const update = await admin('/admin/mail', 'PUT', { revision: 1, enabled: false, transport: 'smtp',
         smtpHost: 'smtp.example.com', smtpPort: 587, smtpSecurity: 'starttls', smtpUsername: 'mailer',
-        senderAddress: 'himoroki@example.com', senderName: 'Himoroki',
+        senderAddress: 'kannabi@example.com', senderName: 'Kannabi',
         password: { action: 'replace', value: 'smtp-private-password' } });
       assert.equal(update.status, 200, await update.clone().text());
       assert.equal((await update.clone().json()).configuration.verificationStatus, 'not-verified');
@@ -128,11 +128,11 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
       const responseText = await (await admin('/admin/mail')).text();
       assert.ok(!responseText.includes(envelope));
       assert.ok(!responseText.includes('smtp-private-password'));
-      const restartedKeys = await MasterKeyManager.open(true, { HIMOROKI_DATA_DIR: data });
+      const restartedKeys = await MasterKeyManager.open(true, { KANNABI_DATA_DIR: data });
       assert.equal(restartedKeys.secretStore().decrypt(envelope, 'smtp-password'), 'smtp-private-password');
       const preserve = await admin('/admin/mail', 'PUT', { revision: 2, enabled: false, transport: 'smtp',
         smtpHost: 'smtp2.example.com', smtpPort: 587, smtpSecurity: 'starttls', smtpUsername: 'mailer',
-        senderAddress: 'himoroki@example.com', senderName: 'Himoroki', password: { action: 'preserve' } });
+        senderAddress: 'kannabi@example.com', senderName: 'Kannabi', password: { action: 'preserve' } });
       assert.equal(preserve.status, 200);
       assert.equal((await store.effectiveMailConfiguration()).smtpPasswordEnvelope, envelope);
       const stale = await admin('/admin/mail', 'PUT', { revision: 2, enabled: false, transport: 'smtp',
@@ -145,7 +145,7 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
       const keyPath = join(data, 'master.key');
       const originalManagedKey = readFileSync(keyPath, 'utf8');
       const wrongKeys = await MasterKeyManager.open(true,
-        { HIMOROKI_SECRET_KEY: randomBytes(32).toString('base64url') });
+        { KANNABI_SECRET_KEY: randomBytes(32).toString('base64url') });
       const degradedMail = new MailService(store, wrongKeys);
       const degradedApp = new Hono().route('/api', createInventoryApi(store, auth, origin, undefined, degradedMail));
       const request = (path: string, method = 'GET', body?: unknown) => degradedApp.request(origin + '/api' + path, {
@@ -159,14 +159,14 @@ test('mail configuration, authorization, encrypted persistence, recovery, and SM
       assert.equal(degraded.masterKeyState, 'ready');
       assert.equal((await request('/admin/mail', 'PUT', { revision: 3, enabled: false, transport: 'smtp',
         smtpHost: 'smtp.example.com', smtpPort: 587, smtpSecurity: 'starttls', smtpUsername: 'mailer',
-        senderAddress: 'himoroki@example.com', senderName: 'Himoroki', password: { action: 'preserve' } })).status, 409);
+        senderAddress: 'kannabi@example.com', senderName: 'Kannabi', password: { action: 'preserve' } })).status, 409);
       assert.equal((await request('/admin/mail', 'PUT', { revision: 3, enabled: false, transport: 'smtp',
         smtpHost: 'smtp.example.com', smtpPort: 587, smtpSecurity: 'starttls', smtpUsername: 'mailer',
-        senderAddress: 'himoroki@example.com', senderName: 'Himoroki',
+        senderAddress: 'kannabi@example.com', senderName: 'Kannabi',
         password: { action: 'replace', value: 'replacement-must-not-bypass-reset' } })).status, 409);
 
       rmSync(keyPath);
-      const missingKeys = await MasterKeyManager.open(true, { HIMOROKI_DATA_DIR: data });
+      const missingKeys = await MasterKeyManager.open(true, { KANNABI_DATA_DIR: data });
       assert.equal(missingKeys.state, 'missing');
       assert.throws(() => statSync(keyPath));
       const recoveryApp = new Hono().route('/api', createInventoryApi(store, auth, origin, undefined,

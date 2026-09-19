@@ -5,9 +5,9 @@ import { canonicalIdentifier } from './identity.js';
 import { demoAssets, evaluatorScopes } from '../scripts/demo/fixtures.js';
 import { demoConfiguration, requireStoppedApp, requireUnversionedBucket } from '../scripts/demo/safety.js';
 
-const env = { HIMOROKI_DEMO: 'local', NODE_ENV: 'development', APP_URL: 'http://127.0.0.1:3000',
+const env = { KANNABI_DEMO: 'local', NODE_ENV: 'development', APP_URL: 'http://127.0.0.1:3000',
   NEO4J_URI: 'bolt://127.0.0.1:7687', NEO4J_PASSWORD: 'test', S3_ENDPOINT: 'http://127.0.0.1:8080',
-  S3_BUCKET: 'himoroki-photos', S3_ACCESS_KEY: 'test', S3_SECRET_KEY: 'test', BETTER_AUTH_SECRET: 'x'.repeat(32) };
+  S3_BUCKET: 'kannabi-photos', S3_ACCESS_KEY: 'test', S3_SECRET_KEY: 'test', BETTER_AUTH_SECRET: 'x'.repeat(32) };
 
 test('demo contents and supported identifiers are deterministic with overlapping scopes', () => {
   const assets = demoAssets();
@@ -32,7 +32,7 @@ test('demo safety requires explicit opt-in, loopback configuration and exact des
     assert.throws(() => demoConfiguration('reset', args, env));
   }
   for (const change of [
-    { HIMOROKI_DEMO: undefined }, { HIMOROKI_DEMO: 'true' }, { NODE_ENV: 'production' }, { NODE_ENV: 'staging' },
+    { KANNABI_DEMO: undefined }, { KANNABI_DEMO: 'true' }, { NODE_ENV: 'production' }, { NODE_ENV: 'staging' },
     { APP_URL: 'https://demo.example.com' }, { APP_URL: 'http://0.0.0.0:3000' },
     { NEO4J_URI: 'neo4j://127.0.0.1:7687' }, { NEO4J_URI: 'bolt://neo4j:7687' },
     { NEO4J_URI: 'bolt://127.0.0.1.evil.example:7687' }, { NEO4J_URI: 'bolt://user:password@127.0.0.1:7687' },

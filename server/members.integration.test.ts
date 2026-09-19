@@ -8,8 +8,8 @@ import { IdentityStore } from './identity-store.js';
 import { createInventoryApi } from './inventory-api.js';
 import type { Mailer, MailMessage } from './mail.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const password = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 
 class CaptureMailer implements Mailer {
   messages: MailMessage[] = [];
@@ -44,7 +44,7 @@ test('administrator-controlled member lifecycle preserves auth and domain invari
       return async (path: string, method = 'GET', body?: unknown) => {
         const response = await app.request(origin + '/api' + path, { method,
           headers: { Origin: origin, Cookie: cookie, 'Content-Type': 'application/json',
-            'x-himoroki-client-ip': `192.0.2.${peer}` },
+            'x-kannabi-client-ip': `192.0.2.${peer}` },
           body: body === undefined ? undefined : JSON.stringify(body) });
         if (response.headers.getSetCookie().length) cookie = response.headers.getSetCookie()
           .map((value) => value.split(';')[0]).join('; ');
@@ -163,7 +163,7 @@ test('administrator-controlled member lifecycle preserves auth and domain invari
       assert.equal(created.member.credentialState, 'pending');
       await mailer.waitFor(before + 1);
       const setupMessage = mailer.messages.at(-1)!;
-      assert.equal(setupMessage.subject, 'Set up your Himoroki account');
+      assert.equal(setupMessage.subject, 'Set up your Kannabi account');
       assert.equal((await client(4)('/auth/reset-password', 'POST', {
         token: resetToken(setupMessage), newPassword: 'established-password-12345',
       })).status, 200);
@@ -195,7 +195,7 @@ test('administrator-controlled member lifecycle preserves auth and domain invari
       const before = mailer.messages.length;
       assert.equal((await admin(`/members/${keys[1]}/recovery`, 'POST')).status, 200);
       await mailer.waitFor(before + 1);
-      assert.equal(mailer.messages.at(-1)!.subject, 'Reset your Himoroki password');
+      assert.equal(mailer.messages.at(-1)!.subject, 'Reset your Kannabi password');
       assert.match(mailer.messages.at(-1)!.text, /one hour/i);
     });
 

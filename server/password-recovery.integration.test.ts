@@ -9,8 +9,8 @@ import { createInventoryApi } from './inventory-api.js';
 import { MailDeliveryError, type Mailer, type MailMessage } from './mail.js';
 import { passwordResetPrefix } from './password-recovery.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const databasePassword = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const databasePassword = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 
 class CaptureMailer implements Mailer {
   readonly messages: MailMessage[] = [];
@@ -58,7 +58,7 @@ test('Better Auth password recovery uses Mailer, consumes tokens, clears sibling
         async request(path: string, method = 'GET', body?: unknown, requestOrigin = origin) {
           const response = await app.request(origin + '/api' + path, { method,
             headers: { Origin: requestOrigin, Cookie: cookie, 'Content-Type': 'application/json',
-              'x-himoroki-client-ip': peer },
+              'x-kannabi-client-ip': peer },
             body: body === undefined ? undefined : JSON.stringify(body) });
           if (response.headers.getSetCookie().length) cookie = response.headers.getSetCookie()
             .map((value) => value.split(';')[0]).join('; ');

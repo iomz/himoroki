@@ -36,13 +36,13 @@ class MemoryMailStore implements MailConfigurationStore {
 }
 
 async function keys() {
-  return MasterKeyManager.open(false, { HIMOROKI_SECRET_KEY: randomBytes(32).toString('base64url') });
+  return MasterKeyManager.open(false, { KANNABI_SECRET_KEY: randomBytes(32).toString('base64url') });
 }
 
 function complete(revision = 0) {
   return { revision, enabled: true, transport: 'smtp', smtpHost: 'smtp.example.com', smtpPort: 587,
     smtpSecurity: 'starttls', smtpUsername: 'mailer', senderAddress: 'noreply@example.com',
-    senderName: 'Himoroki', password: { action: 'replace', value: 'mail-password' } } as const;
+    senderName: 'Kannabi', password: { action: 'replace', value: 'mail-password' } } as const;
 }
 
 test('mail configuration validation is strict and normalizes addresses', () => {
@@ -126,7 +126,7 @@ test('SMTP delivery maps persisted security, sender, authentication, and recipie
   store.configuration = { revision: 1, enabled: true, transport: 'smtp', smtpHost: 'smtp.example.com',
     smtpPort: 587, smtpSecurity: 'starttls', smtpUsername: 'mailer',
     smtpPasswordEnvelope: manager.secretStore().encrypt('secret', 'smtp-password'),
-    senderAddress: 'noreply@example.com', senderName: 'Himoroki',
+    senderAddress: 'noreply@example.com', senderName: 'Kannabi',
     verificationStatus: 'not-verified', verificationObservedAt: null };
   let options: unknown;
   let message: unknown;
@@ -137,7 +137,7 @@ test('SMTP delivery maps persisted security, sender, authentication, and recipie
   assert.deepEqual(options, { host: 'smtp.example.com', port: 587, secure: false, requireTLS: true,
     ignoreTLS: false, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
     auth: { user: 'mailer', pass: 'secret' } });
-  assert.deepEqual(message, { from: { address: 'noreply@example.com', name: 'Himoroki' },
+  assert.deepEqual(message, { from: { address: 'noreply@example.com', name: 'Kannabi' },
     to: 'tester@example.com', subject: 'Subject', text: 'First paragraph.\n\nSecond paragraph.', html: undefined });
   assert.equal(closed, true);
   assert.equal(store.configuration.verificationStatus, 'verified');
@@ -151,7 +151,7 @@ test('disabled and provider failures return safe categories', async (t) => {
   await assert.rejects(disabledService.send({ to: 'test@example.com', subject: 'Test', text: 'Test' }),
     (error: MailDeliveryError) => error.category === 'disabled');
   store.configuration = { ...disabled(), enabled: true, smtpHost: 'smtp.example.com', smtpPort: 25,
-    smtpSecurity: 'none', senderAddress: 'noreply@example.com', senderName: 'Himoroki' };
+    smtpSecurity: 'none', senderAddress: 'noreply@example.com', senderName: 'Kannabi' };
   const failed = { sendMail: async () => { throw Object.assign(new Error('contains private provider details'), { code: 'EAUTH' }); },
     close() {} } as unknown as Transporter;
   const service = new MailService(store, manager, () => failed);

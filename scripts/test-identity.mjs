@@ -7,7 +7,7 @@ import { readdirSync } from 'node:fs';
 
 const exec = promisify(execFile);
 for (const testFile of readdirSync('server').filter((file) => file.endsWith('.integration.test.ts')).sort()) {
-  const name = `himoroki-identity-test-${randomUUID()}`;
+  const name = `kannabi-identity-test-${randomUUID()}`;
   const password = randomUUID();
   const image = process.env.NEO4J_TEST_IMAGE ?? 'neo4j:5-community';
   let started = false;
@@ -41,11 +41,11 @@ for (const testFile of readdirSync('server').filter((file) => file.endsWith('.in
       await exec('docker', ['run', '--rm', '-d', '--name', name + '-s3', '-p', '127.0.0.1::8080',
         '-e', 'ADMIN_PASSWORD=' + password, '-e', 'JWT=' + randomUUID() + randomUUID(),
         '-e', 'DEFAULT_ACCESS_KEY=' + name, '-e', 'DEFAULT_SECRET_KEY=' + password,
-        '-e', 'DEFAULT_BUCKETS=himoroki-photos', '-e', 'ALLOW_ACCOUNT_CREATION=false',
+        '-e', 'DEFAULT_BUCKETS=kannabi-photos', '-e', 'ALLOW_ACCOUNT_CREATION=false',
         'ghcr.io/achtungsoftware/alarik:1.0.0-beta-16']);
       objectStarted = true;
       const { stdout: address } = await exec('docker', ['port', name + '-s3', '8080']);
-      storageEnv = { S3_ENDPOINT: 'http://' + address.trim(), S3_BUCKET: 'himoroki-photos', S3_ACCESS_KEY: name, S3_SECRET_KEY: password, S3_REGION: 'us-east-1' };
+      storageEnv = { S3_ENDPOINT: 'http://' + address.trim(), S3_BUCKET: 'kannabi-photos', S3_ACCESS_KEY: name, S3_SECRET_KEY: password, S3_REGION: 'us-east-1' };
       const s3 = new S3Client({ endpoint: storageEnv.S3_ENDPOINT, region: 'us-east-1', forcePathStyle: true,
         credentials: { accessKeyId: name, secretAccessKey: password } });
       const storageDeadline = Date.now() + 90000;
@@ -59,7 +59,7 @@ for (const testFile of readdirSync('server').filter((file) => file.endsWith('.in
     const code = await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, ['--import', 'tsx', '--test', `server/${testFile}`], {
         stdio: 'inherit',
-        env: { ...process.env, ...storageEnv, HIMOROKI_TEST_NEO4J_URI: uri, HIMOROKI_TEST_NEO4J_PASSWORD: password },
+        env: { ...process.env, ...storageEnv, KANNABI_TEST_NEO4J_URI: uri, KANNABI_TEST_NEO4J_PASSWORD: password },
       });
       child.on('error', reject);
       child.on('exit', (code) => resolve(code ?? 1));

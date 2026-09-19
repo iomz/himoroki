@@ -9,8 +9,8 @@ import { storageFromEnv, type ObjectStorage } from './storage.js';
 import { createAuth } from './auth.js';
 import { createInventoryApi } from './inventory-api.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const password = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZxoAAAAASUVORK5CYII=', 'base64');
 const photo = () => new File([png], 'photo.png', { type: 'image/png' });
 test('S3 media, policy and administration', { skip: !uri || !password || !process.env.S3_ENDPOINT }, async (t) => {

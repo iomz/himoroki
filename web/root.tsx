@@ -23,12 +23,12 @@ export async function clientAction() {
 export function Layout({ children }: { children: ReactNode }) {
   return <html lang="en" suppressHydrationWarning><head>
     <meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="data:," /><title>Himoroki</title><Meta />
-    <style id="himoroki-theme-palettes">{themeStylesheet(builtInThemes)}</style>
+    <link rel="icon" href="data:," /><title>Kannabi</title><Meta />
+    <style id="kannabi-theme-palettes">{themeStylesheet(builtInThemes)}</style>
     <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} /><Links />
   </head><body>{children}<ScrollRestoration /><Scripts /></body></html>;
 }
-export function HydrateFallback() { return <main className="loading">Loading Himoroki…</main>; }
+export function HydrateFallback() { return <main className="loading">Loading Kannabi…</main>; }
 export { WorkspaceError as ErrorBoundary } from './route-error';
 export default function App({ loaderData, actionData }: Route.ComponentProps) {
   const { user, isAdmin } = loaderData;
@@ -65,9 +65,9 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
       <a className="skip-link" href="#workspace">Skip to content</a>
       <main id="workspace" tabIndex={-1} className="auth-main" aria-busy={busy}>
         <div className="auth-composition">
-          <Link to="/signin" className="auth-brand" aria-label="Himoroki sign in">
+          <Link to="/signin" className="auth-brand" aria-label="Kannabi sign in">
             <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M5 27V9h6v18M21 27V9h6v18M11 5h10v6H11z" fill="currentColor" /></svg>
-            <span>Himoroki<small>Identity & inventory</small></span>
+            <span>Kannabi<small>Identity & inventory</small></span>
           </Link>
           {actionData?.error && <p role="alert">{actionData.error}</p>}<Outlet />
         </div>
@@ -75,9 +75,9 @@ export default function App({ loaderData, actionData }: Route.ComponentProps) {
     </div> : <div className="app-shell" data-theme={theme.id} data-color-scheme={colorScheme}>
     <a className="skip-link" href="#workspace">Skip to content</a>
     <aside className="sidebar">
-      <Link to="/" className="brand" onClick={() => setMenuOpen(false)} aria-label="Himoroki home">
+      <Link to="/" className="brand" onClick={() => setMenuOpen(false)} aria-label="Kannabi home">
         <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M5 27V9h6v18M21 27V9h6v18M11 5h10v6H11z" fill="currentColor" /></svg>
-        <span>Himoroki<small>Identity & inventory</small></span>
+        <span>Kannabi<small>Identity & inventory</small></span>
       </Link>
       <button className="nav-toggle" aria-expanded={menuOpen} aria-controls="primary-navigation" onClick={() => setMenuOpen(!menuOpen)}>Navigation</button>
       <nav id="primary-navigation" aria-label="Primary" className={menuOpen ? 'expanded' : ''} onClick={() => setMenuOpen(false)}>

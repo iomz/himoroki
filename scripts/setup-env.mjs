@@ -16,7 +16,7 @@ if (args.length > 1 || (args.length === 1 && args[0] !== '--dev')) {
     APP_URL: 'http://127.0.0.1:3000',
     BETTER_AUTH_SECRET: secret(),
     S3_ENDPOINT: 'http://127.0.0.1:8080',
-    S3_BUCKET: 'himoroki-photos',
+    S3_BUCKET: 'kannabi-photos',
     S3_REGION: 'us-east-1',
     S3_ACCESS_KEY: secret(),
     S3_SECRET_KEY: secret(),
@@ -33,7 +33,7 @@ if (args.length > 1 || (args.length === 1 && args[0] !== '--dev')) {
     console.log('For a fresh deployment, run:');
     console.log(dev ? 'pnpm install\ndocker compose up -d --wait neo4j alarik\npnpm dev'
       : 'docker compose up -d --build --wait');
-    console.log(`Himoroki: ${values.APP_URL}/`);
+    console.log(`Kannabi: ${values.APP_URL}/`);
     console.log('Open this URL in your browser during development.');
     console.log('Existing storage volumes retain their credentials; generating a file does not rotate them.');
   } catch (error) {

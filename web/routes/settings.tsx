@@ -111,7 +111,7 @@ function MailSettings({ mail }: { mail: MailConfiguration }) {
   const resetResult = reset.data?.kind === 'secret-reset' ? reset.data : null;
   const status = mailStatus(mail);
   return <section className="panel form-panel mail-settings"><div className="section-heading">
-    <div><h2>Mail delivery</h2><p className="hint">Configure SMTP delivery for Himoroki transactional mail.</p></div>
+    <div><h2>Mail delivery</h2><p className="hint">Configure SMTP delivery for Kannabi transactional mail.</p></div>
     <div className="mail-status"><span className={`badge mail-state ${status.value}`}>{status.label}</span>
       {mail.verificationObservedAt && <time dateTime={mail.verificationObservedAt}
         title={new Date(mail.verificationObservedAt).toLocaleString()}>Observed {new Date(mail.verificationObservedAt).toLocaleString()}</time>}
@@ -194,7 +194,7 @@ function MailSettings({ mail }: { mail: MailConfiguration }) {
     </div>
 
     {mail.masterKeyState !== 'ready' || mail.passwordState === 'unavailable' ? <div className="secret-recovery"><h3>Instance master-key recovery</h3>
-      <p>Restore the instance master key and restart Himoroki, or explicitly reset all encrypted credentials. Reset disables mail and cannot be undone.</p>
+      <p>Restore the instance master key and restart Kannabi, or explicitly reset all encrypted credentials. Reset disables mail and cannot be undone.</p>
       {resetResult?.error && <p role="alert">{resetResult.error}</p>}
       {resetResult?.saved && <p role="status" className="notice">Encrypted credentials reset.</p>}
       <reset.Form method="post"><input type="hidden" name="intent" value="secret-reset" />

@@ -1,6 +1,6 @@
 import type { AssetIdentifier } from '../../server/identity.js';
 
-export const demoPassword = 'Himoroki-demo-only-2026!';
+export const demoPassword = 'Kannabi-demo-only-2026!';
 export const demoAccounts = [
   { name: 'Alex Demo', email: 'evaluator@demo.invalid' },
   { name: 'Morgan Demo', email: 'collaborator@demo.invalid' },

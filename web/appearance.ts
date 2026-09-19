@@ -3,7 +3,7 @@ import { resolveAppearance, type AppearancePreference, type ColorScheme } from '
 import { themeIds, type ThemeId } from '../shared/theme';
 
 const systemQuery = '(prefers-color-scheme: dark)';
-const themeHintKey = 'himoroki.instance-theme';
+const themeHintKey = 'kannabi.instance-theme';
 let mediaQuery: MediaQueryList | null = null;
 
 function systemMediaQuery(): MediaQueryList | null {

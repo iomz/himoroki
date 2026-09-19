@@ -305,7 +305,7 @@ export class MailService implements Mailer {
     await this.store.readMailConfiguration(actorKey);
     const input = record(value, ['recipient']);
     const recipient = mailbox(input.recipient, 'Test recipient');
-    await this.send({ to: recipient, subject: 'Himoroki mail delivery test',
-      text: 'Himoroki successfully sent this test message using the persisted mail configuration.' });
+    await this.send({ to: recipient, subject: 'Kannabi mail delivery test',
+      text: 'Kannabi successfully sent this test message using the persisted mail configuration.' });
   }
 }

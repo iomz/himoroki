@@ -17,20 +17,20 @@ test('password-reset identifiers retain purpose without retaining token', async 
 });
 
 test('reset links use canonical origin and keep token in fragment', () => {
-  const url = passwordResetURL('https://himoroki.example/base?ignored=yes', 'a/b?c');
-  assert.equal(url, 'https://himoroki.example/reset-password#token=a%2Fb%3Fc');
+  const url = passwordResetURL('https://kannabi.example/base?ignored=yes', 'a/b?c');
+  assert.equal(url, 'https://kannabi.example/reset-password#token=a%2Fb%3Fc');
   assert.equal(resetTokenFromHash(new URL(url).hash), 'a/b?c');
   assert.equal(resetTokenFromHash('#other=value'), null);
-  const message = passwordResetMessage('https://himoroki.example', 'person@example.com', 'token');
+  const message = passwordResetMessage('https://kannabi.example', 'person@example.com', 'token');
   assert.equal(message.to, 'person@example.com');
-  assert.match(message.subject, /Reset your Himoroki password/);
-  assert.match(message.text, /Open this link to choose a new password:\nhttps:\/\/himoroki\.example\/reset-password#token=token\n/);
+  assert.match(message.subject, /Reset your Kannabi password/);
+  assert.match(message.text, /Open this link to choose a new password:\nhttps:\/\/kannabi\.example\/reset-password#token=token\n/);
   assert.match(message.text, /expires in one hour and can be used only once/);
   assert.match(message.text, /ignore this email/);
   assert.match(message.text, /password will remain unchanged/);
-  const setup = passwordResetMessage('https://himoroki.example', 'new@example.com', 'setup-token', 'setup');
-  assert.equal(setup.subject, 'Set up your Himoroki account');
-  assert.match(setup.text, /An account has been created for you on Himoroki/);
+  const setup = passwordResetMessage('https://kannabi.example', 'new@example.com', 'setup-token', 'setup');
+  assert.equal(setup.subject, 'Set up your Kannabi account');
+  assert.match(setup.text, /An account has been created for you on Kannabi/);
   assert.match(setup.text, /set your password and finish setting up your account/);
   assert.match(setup.text, /expires in one hour and can be used only once/);
   assert.match(setup.text, /weren't expecting this account/);
@@ -47,7 +47,7 @@ test('mail dispatch is asynchronous and reports only safe failure category', asy
   const logs: unknown[][] = [];
   console.error = (...values: unknown[]) => { logs.push(values); };
   try {
-    queuePasswordResetEmail(mailer, 'https://himoroki.example', 'person@example.com', 'secret-token');
+    queuePasswordResetEmail(mailer, 'https://kannabi.example', 'person@example.com', 'secret-token');
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(received?.to, 'person@example.com');
     assert.equal(logs.length, 0);

@@ -5,8 +5,8 @@ import { IdentityStore, DuplicateIdentityError, ReferenceError, type ReportAsset
 import { ValidationError, type AssetIdentifier } from './identity.js';
 
 // Only the isolated Docker runner supplies these variables; no default database.
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const password = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 test('Neo4j identity integrity', { skip: !uri || !password }, async (t) => {
   const driver = neo4j.driver(uri!, neo4j.auth.basic('neo4j', password!));
   t.after(() => driver.close());

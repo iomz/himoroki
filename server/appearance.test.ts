@@ -36,5 +36,5 @@ test('pre-hydration bootstrap never consumes a cached User appearance', () => {
   const script = themeBootScript();
   assert.doesNotMatch(script, /appearance|user/i);
   assert.match(script, /prefers-color-scheme: dark/);
-  assert.match(script, /himoroki\.instance-theme/);
+  assert.match(script, /kannabi\.instance-theme/);
 });

@@ -11,7 +11,7 @@ const script = fileURLToPath(new URL('./setup-env.mjs', import.meta.url));
 const template = parseEnv(readFileSync(new URL('../.env.example', import.meta.url), 'utf8'));
 const credentials = ['NEO4J_PASSWORD', 'BETTER_AUTH_SECRET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'ALARIK_ADMIN_PASSWORD', 'ALARIK_JWT_SECRET'];
 function directory(t) {
-  const dir = mkdtempSync(join(tmpdir(), 'himoroki-env-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'kannabi-env-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -35,7 +35,7 @@ for (const dev of [false, true]) {
     }
     if (process.platform !== 'win32') assert.equal(statSync(join(dir, '.env')).mode & 0o777, 0o600);
     assert.ok(result.stdout.includes(dev ? 'pnpm dev' : 'docker compose up -d --build --wait'));
-    assert.match(result.stdout, /Himoroki: http:\/\/127\.0\.0\.1:3000\//);
+    assert.match(result.stdout, /Kannabi: http:\/\/127\.0\.0\.1:3000\//);
     const other = directory(t);
     assert.equal(run(other).status, 0);
     const second = parseEnv(readFileSync(join(other, '.env'), 'utf8'));

@@ -26,7 +26,7 @@ export class AesGcmSecretStore implements SecretStore {
     if (!plaintext) throw new SecretEnvelopeError('Secret value is required');
     const nonce = randomBytes(nonceBytes);
     const cipher = createCipheriv('aes-256-gcm', this.key, nonce);
-    cipher.setAAD(Buffer.from(`himoroki:secret:v1:${purpose}`, 'utf8'));
+    cipher.setAAD(Buffer.from(`kannabi:secret:v1:${purpose}`, 'utf8'));
     const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const envelope = Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]).toString('base64url');
     return envelopePrefix + envelope;
@@ -44,7 +44,7 @@ export class AesGcmSecretStore implements SecretStore {
       const tag = bytes.subarray(nonceBytes, nonceBytes + tagBytes);
       const ciphertext = bytes.subarray(nonceBytes + tagBytes);
       const decipher = createDecipheriv('aes-256-gcm', this.key, nonce);
-      decipher.setAAD(Buffer.from(`himoroki:secret:v1:${purpose}`, 'utf8'));
+      decipher.setAAD(Buffer.from(`kannabi:secret:v1:${purpose}`, 'utf8'));
       decipher.setAuthTag(tag);
       return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
     } catch {
@@ -58,16 +58,16 @@ export type MasterKeySource = 'environment' | 'file';
 
 export function applicationDataDirectory(env: NodeJS.ProcessEnv = process.env,
   platform = process.platform, home = homedir()): string {
-  if (env.HIMOROKI_DATA_DIR) return resolve(env.HIMOROKI_DATA_DIR);
-  if (platform === 'win32') return join(env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'Himoroki');
-  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'Himoroki');
-  return join(env.XDG_DATA_HOME ?? join(home, '.local', 'share'), 'himoroki');
+  if (env.KANNABI_DATA_DIR) return resolve(env.KANNABI_DATA_DIR);
+  if (platform === 'win32') return join(env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'Kannabi');
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'Kannabi');
+  return join(env.XDG_DATA_HOME ?? join(home, '.local', 'share'), 'kannabi');
 }
 
 function decodeKey(value: string): Buffer {
   const key = Buffer.from(value, 'base64url');
   if (value.length !== 43 || key.length !== keyBytes || key.toString('base64url') !== value) {
-    throw new Error('HIMOROKI_SECRET_KEY must be unpadded base64url encoding of exactly 32 bytes');
+    throw new Error('KANNABI_SECRET_KEY must be unpadded base64url encoding of exactly 32 bytes');
   }
   return key;
 }
@@ -97,7 +97,7 @@ export class MasterKeyManager {
     private stateValue: MasterKeyState, private storeValue: SecretStore | null) {}
 
   static async open(encryptedSecretsExist: boolean, env: NodeJS.ProcessEnv = process.env): Promise<MasterKeyManager> {
-    const override = env.HIMOROKI_SECRET_KEY;
+    const override = env.KANNABI_SECRET_KEY;
     if (override) return new MasterKeyManager('environment', null, 'ready', new AesGcmSecretStore(decodeKey(override)));
     const keyPath = join(applicationDataDirectory(env), 'master.key');
     try {

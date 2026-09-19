@@ -75,7 +75,7 @@ function CreateMemberDialog({ actionData, onDismiss }: { actionData?: MemberActi
   return <dialog ref={dialog} className="member-dialog" aria-labelledby="create-member-title" onClose={onDismiss}>
     <div className="member-dialog-card"><div className="member-dialog-heading"><div><p className="eyebrow">Member account</p><h2 id="create-member-title">Create member</h2></div>
       <button type="button" className="dialog-close" aria-label="Close" onClick={() => dialog.current?.close()}>×</button></div>
-      <p className="hint">Himoroki sends a secure setup link. Administrators never handle member passwords.</p>
+      <p className="hint">Kannabi sends a secure setup link. Administrators never handle member passwords.</p>
       <Form method="post"><fieldset disabled={busy}><input type="hidden" name="intent" value="create" />
         <label>Name<input name="name" required maxLength={200} autoComplete="name" /></label>
         <label>Email<input name="email" required maxLength={254} type="email" autoComplete="email" /></label>

@@ -44,9 +44,9 @@ const cleanupTimer = setInterval(cleanup, 60000);
 cleanupTimer.unref();
 const auth = await createAuth(driver, appURL, authSecret, mail);
 app.use('/api/*', async (c, next) => {
-  c.req.raw.headers.delete('x-himoroki-client-ip');
+  c.req.raw.headers.delete('x-kannabi-client-ip');
   const address = getConnInfo(c).remote.address;
-  if (address) c.req.raw.headers.set('x-himoroki-client-ip', address);
+  if (address) c.req.raw.headers.set('x-kannabi-client-ip', address);
   await next();
 });
 app.route('/api', createInventoryApi(store, auth, applicationOrigin, media, mail));
@@ -59,7 +59,7 @@ app.all('/assets/*', (c) => c.notFound());
 app.get('*', serveStatic({ path: './build/client/index.html' }));
 
 const server = serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, () => {
-  console.log(`Himoroki: ${applicationOrigin}/`);
+  console.log(`Kannabi: ${applicationOrigin}/`);
   if (process.env.NODE_ENV !== 'production') console.log('Open this URL in your browser during development.');
 });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

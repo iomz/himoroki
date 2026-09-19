@@ -33,7 +33,7 @@ export async function createAuth(driver: Driver, baseURL: string, secret: string
     },
     user: {
       modelName: 'User',
-      // Current password step-up is enforced by Himoroki's profile endpoint.
+      // Current password step-up is enforced by Kannabi's profile endpoint.
       // Revisit this immediate-update policy when email verification is introduced.
       changeEmail: { enabled: true, updateEmailWithoutVerification: true },
       additionalFields: {
@@ -53,7 +53,7 @@ export async function createAuth(driver: Driver, baseURL: string, secret: string
     advanced: {
       database: { generateId: 'uuid' },
       // The Node entry point overwrites this header with the TCP peer address.
-      ipAddress: { ipAddressHeaders: ['x-himoroki-client-ip'] },
+      ipAddress: { ipAddressHeaders: ['x-kannabi-client-ip'] },
     },
     databaseHooks: {
       user: { create: { before: async (user) => {

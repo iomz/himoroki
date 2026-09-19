@@ -5,8 +5,8 @@ export function demoConfiguration(mode: DemoMode, args: string[], env: NodeJS.Pr
     throw new Error('RESET DELETES ALL application data and every object in the configured media bucket. Run pnpm demo:reset -- --yes to confirm.');
   }
   if (mode === 'seed' && flags.length) throw new Error('Usage: pnpm demo:seed');
-  if (env.HIMOROKI_DEMO !== 'local' || (env.NODE_ENV && env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test')) {
-    throw new Error('Demo commands require HIMOROKI_DEMO=local and a non-production development environment.');
+  if (env.KANNABI_DEMO !== 'local' || (env.NODE_ENV && env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test')) {
+    throw new Error('Demo commands require KANNABI_DEMO=local and a non-production development environment.');
   }
   function localURL(value: string | undefined, name: string, protocol: string) {
     if (!value) throw new Error(`${name} must be explicitly configured`);
@@ -20,7 +20,7 @@ export function demoConfiguration(mode: DemoMode, args: string[], env: NodeJS.Pr
   const app = localURL(env.APP_URL, 'APP_URL', 'http:');
   const database = localURL(env.NEO4J_URI, 'NEO4J_URI', 'bolt:');
   const storage = localURL(env.S3_ENDPOINT, 'S3_ENDPOINT', 'http:');
-  if (env.S3_BUCKET !== 'himoroki-photos') throw new Error('Demo commands require the dedicated himoroki-photos bucket');
+  if (env.S3_BUCKET !== 'kannabi-photos') throw new Error('Demo commands require the dedicated kannabi-photos bucket');
   for (const name of ['NEO4J_PASSWORD', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'BETTER_AUTH_SECRET']) {
     if (!env[name]) throw new Error(`${name} is required`);
   }

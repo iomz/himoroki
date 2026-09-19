@@ -1,6 +1,6 @@
-# Himoroki
+# Kannabi
 
-Himoroki is a modern, deployable inventory system for giving physical things identity and presence wherever they are managed.
+Kannabi is a modern, deployable inventory system for giving physical things identity and presence wherever they are managed.
 
 ## Development
 
@@ -31,9 +31,9 @@ docker compose up -d --wait neo4j alarik
 pnpm dev
 ```
 
-Open `http://127.0.0.1:3000` after Vite and Hono start; this is the canonical Himoroki application origin in development.
+Open `http://127.0.0.1:3000` after Vite and Hono start; this is the canonical Kannabi application origin in development.
 For an existing local `.env`, set `APP_URL=http://127.0.0.1:3000` without replacing its stored credentials.
-React Router/Vite may also print `http://127.0.0.1:5173`, but that listener is development tooling rather than the Himoroki browser entry point.
+React Router/Vite may also print `http://127.0.0.1:5173`, but that listener is development tooling rather than the Kannabi browser entry point.
 Hono connects to Neo4j.
 Startup requires Neo4j and an accessible private S3 bucket; it installs uniqueness constraints before listening.
 `GET /api/health` checks process liveness; `GET /api/ready` returns 503 if Neo4j becomes unreachable.
@@ -49,9 +49,9 @@ The built application serves UI and API on port 3000 by default.
 For the containerized application, run `docker compose up --build` after configuring `.env`.
 Compose binds published ports to localhost and persists Neo4j data in a named volume.
 [Alarik](https://github.com/achtungsoftware/alarik) is the default development object store, pinned to `1.0.0-beta-16`.
-Compose creates a private `himoroki-photos` bucket and keeps bytes in its own named volume.
+Compose creates a private `kannabi-photos` bucket and keeps bytes in its own named volume.
 Alarik credentials and default bucket are seeded on first startup; changing environment values does not rotate existing stored credentials.
-To use another S3-compatible backend, configure `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` and provision a private bucket before starting Himoroki.
+To use another S3-compatible backend, configure `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` and provision a private bucket before starting Kannabi.
 The application needs HeadBucket, PutObject, GetObject, and DeleteObject access; it does not depend on Alarik administration APIs.
 
 ## Development/demo dataset
@@ -68,21 +68,21 @@ Stop `pnpm dev`/`pnpm start` before seeding, or stop the Compose app as below; l
 ```sh
 docker compose stop app
 docker compose up -d --wait neo4j alarik
-HIMOROKI_DEMO=local pnpm demo:seed
+KANNABI_DEMO=local pnpm demo:seed
 ```
 
 Seed requires empty application data and an empty media bucket; an initialized Settings node is allowed and receives optional-photo/UTC defaults.
 A repeated seed fails without modifying the existing dataset rather than duplicating it.
 
-**Reset permanently deletes all application data in the configured Neo4j database and every object in the configured `himoroki-photos` bucket, including data you created yourself, before recreating the demo.**
+**Reset permanently deletes all application data in the configured Neo4j database and every object in the configured `kannabi-photos` bucket, including data you created yourself, before recreating the demo.**
 It preserves database schema, bucket configuration, and infrastructure credentials.
 To replace an existing local development dataset yourself, stop the app and run:
 
 ```sh
-HIMOROKI_DEMO=local pnpm demo:reset -- --yes
+KANNABI_DEMO=local pnpm demo:reset -- --yes
 ```
 
-Both commands require explicit `HIMOROKI_DEMO=local` opt-in, non-production `NODE_ENV`, an HTTP loopback `APP_URL`, a direct loopback `bolt://` Neo4j endpoint, and a loopback HTTP S3 endpoint using the dedicated `himoroki-photos` bucket.
+Both commands require explicit `KANNABI_DEMO=local` opt-in, non-production `NODE_ENV`, an HTTP loopback `APP_URL`, a direct loopback `bolt://` Neo4j endpoint, and a loopback HTTP S3 endpoint using the dedicated `kannabi-photos` bucket.
 Use the default local Alarik setup; container service names, remote hosts, and wildcard addresses are rejected.
 Demo commands also require object listing and bucket-versioning inspection permissions; enabled or suspended bucket versioning is rejected so reset cannot leave hidden media versions.
 The opt-in asserts that these are dedicated, disposable development services: do not use forwarded remote ports or shared stores.
@@ -91,7 +91,7 @@ If reset or seed fails partway through, keep the app stopped, fix the reported c
 
 Resume `pnpm dev`, or `docker compose up -d --build app` for the full local deployment, with `APP_URL=http://127.0.0.1:3000`.
 Use the same local configuration and infrastructure credentials as before.
-All demo accounts use password **`Himoroki-demo-only-2026!`**; never expose this dataset or these credentials on a public deployment.
+All demo accounts use password **`Kannabi-demo-only-2026!`**; never expose this dataset or these credentials on a public deployment.
 
 | Account | Role | All | Mine | Group access | Public |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -198,22 +198,22 @@ Mail configuration is stored in Neo4j on a separate admin-only configuration sur
 SMTP passwords are encrypted with AES-256-GCM before persistence and are never returned to the browser.
 TLS, required STARTTLS, and unencrypted SMTP are supported; unencrypted SMTP cannot use authentication.
 Saving an enabled configuration verifies the persisted SMTP connection, TLS mode, and authentication without undoing the save when verification fails.
-Himoroki stores the latest safe verification result and observation time; opening Settings does not contact the SMTP server, and successful test delivery refreshes the observation.
+Kannabi stores the latest safe verification result and observation time; opening Settings does not contact the SMTP server, and successful test delivery refreshes the observation.
 Mail is disabled by default.
 When mail is configured, password-based accounts can request a one-hour, single-use password-reset link from the sign-in experience.
 Reset requests never disclose whether an eligible account exists or whether delivery succeeded; successful resets revoke existing sessions.
 Email verification, invitations, email-change verification, and other authentication email flows remain disabled.
 
-Himoroki generates and reuses an instance master key in its platform application-data directory.
-The Compose deployment stores it in the `himoroki-data` volume at `/var/lib/himoroki/master.key`.
-Native Linux follows `XDG_DATA_HOME` or `~/.local/share/himoroki`; macOS uses `~/Library/Application Support/Himoroki`; Windows uses `LOCALAPPDATA/Himoroki`.
-`HIMOROKI_DATA_DIR` may override the directory.
-Deployments that externally manage keys may set `HIMOROKI_SECRET_KEY` to the unpadded base64url encoding of exactly 32 random bytes.
+Kannabi generates and reuses an instance master key in its platform application-data directory.
+The Compose deployment stores it in the `kannabi-data` volume at `/var/lib/kannabi/master.key`.
+Native Linux follows `XDG_DATA_HOME` or `~/.local/share/kannabi`; macOS uses `~/Library/Application Support/Kannabi`; Windows uses `LOCALAPPDATA/Kannabi`.
+`KANNABI_DATA_DIR` may override the directory.
+Deployments that externally manage keys may set `KANNABI_SECRET_KEY` to the unpadded base64url encoding of exactly 32 random bytes.
 
 A complete secret-bearing backup requires both the Neo4j backup and instance master key.
 A database backup alone does not reveal the SMTP password, while losing the key makes the encrypted credential unreadable.
-When a key is missing or wrong, Himoroki keeps non-mail functionality available, fails mail closed, and asks an administrator either to restore the key or explicitly reset all encrypted credentials.
-The reset disables mail, removes encrypted credentials, and rotates the managed filesystem key; deployments using `HIMOROKI_SECRET_KEY` must rotate that external key through their deployment system.
+When a key is missing or wrong, Kannabi keeps non-mail functionality available, fails mail closed, and asks an administrator either to restore the key or explicitly reset all encrypted credentials.
+The reset disables mail, removes encrypted credentials, and rotates the managed filesystem key; deployments using `KANNABI_SECRET_KEY` must rotate that external key through their deployment system.
 
 Uploads reserve a short-lived metadata record before storing bytes.
 The Asset and photo relationship commit together only after storage succeeds.
@@ -239,10 +239,9 @@ It never uses the application `.env` or an existing database.
 
 ## Name
 
-**Himoroki** comes from 神籬, now commonly read *himorogi* and historically also read *himoroki*.
-A himoroki is a place or structure temporarily prepared to receive a kami: establish it where needed, and that place gains a particular purpose.
-The image fits software designed to be deployed wherever an inventory system is needed, without binding it to one server, institution, or installation.
+**Kannabi** comes from 神奈備 (*kannabi*), evoking a place or domain associated with the presence of kami.
+The image fits software designed to give physical things identity and context wherever they are managed, without binding the system to one server, institution, or installation.
 
-The application belongs to the **Kannabi** project.
-神奈備 (*Kannabi*) evokes a place or domain associated with the presence of kami; it names the broader project context, while Himoroki names the application established within it.
+The application began under the name **Himoroki**, inspired by 神籬 (*himorogi*), a place or structure temporarily prepared to receive a kami.
+It adopted Kannabi before accumulating public compatibility constraints: a shorter, clearer name that preserves the original connection to place, identity, and meaning.
 This story explains the names without defining an architectural naming scheme: components should keep clear technical names.

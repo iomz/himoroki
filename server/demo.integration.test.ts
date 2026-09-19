@@ -17,14 +17,14 @@ import { assetPageRequest } from './asset-page.js';
 import { runDemo } from '../scripts/demo/run.js';
 import { demoAccounts, demoAssets, demoPassword, evaluatorScopes } from '../scripts/demo/fixtures.js';
 
-const uri = process.env.HIMOROKI_TEST_NEO4J_URI;
-const password = process.env.HIMOROKI_TEST_NEO4J_PASSWORD;
+const uri = process.env.KANNABI_TEST_NEO4J_URI;
+const password = process.env.KANNABI_TEST_NEO4J_PASSWORD;
 test('development demo seed and full reset on disposable Neo4j and Alarik', { skip: !uri || !password || !process.env.S3_ENDPOINT }, async (t) => {
   const listener = createServer();
   await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
   const address = listener.address(); assert.ok(address && typeof address !== 'string');
   await new Promise<void>((resolve) => listener.close(() => resolve()));
-  const env: NodeJS.ProcessEnv & { APP_URL: string; BETTER_AUTH_SECRET: string } = { ...process.env, HIMOROKI_DEMO: 'local', NODE_ENV: 'test', APP_URL: `http://127.0.0.1:${address.port}`,
+  const env: NodeJS.ProcessEnv & { APP_URL: string; BETTER_AUTH_SECRET: string } = { ...process.env, KANNABI_DEMO: 'local', NODE_ENV: 'test', APP_URL: `http://127.0.0.1:${address.port}`,
     PORT: String(address.port), NEO4J_URI: uri!, NEO4J_USERNAME: 'neo4j', NEO4J_PASSWORD: password!, BETTER_AUTH_SECRET: randomUUID() + randomUUID() };
   const driver = neo4j.driver(uri!, neo4j.auth.basic('neo4j', password!));
   const s3 = new S3Client({ endpoint: env.S3_ENDPOINT, region: env.S3_REGION, forcePathStyle: true,
@@ -66,7 +66,7 @@ test('development demo seed and full reset on disposable Neo4j and Alarik', { sk
     const expected = [evaluatorScopes, { all: 88, mine: 56, group: 72, public: 34 }, { all: 50, mine: 20, group: 20, public: 34 }];
     for (const [index, account] of demoAccounts.entries()) {
       const response = await app.request(env.APP_URL + '/api/auth/sign-in/email', { method: 'POST',
-        headers: { Origin: env.APP_URL, 'Content-Type': 'application/json', 'x-himoroki-client-ip': `192.0.2.${index + 1}` },
+        headers: { Origin: env.APP_URL, 'Content-Type': 'application/json', 'x-kannabi-client-ip': `192.0.2.${index + 1}` },
         body: JSON.stringify({ email: account.email, password: demoPassword }) });
       assert.equal(response.status, 200, await response.clone().text());
       const cookie = response.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');

@@ -40,7 +40,7 @@ export default function SignIn({ actionData }: Route.ComponentProps) {
         <p id="passkey-availability" className="auth-coming-soon">Coming soon</p>
       </>}
       <p className="auth-switch">
-        {signup ? 'Already have an account? ' : 'New to Himoroki? '}
+        {signup ? 'Already have an account? ' : 'New to Kannabi? '}
         <Link to={signup ? '/signin' : '/signup'}>{signup ? 'Sign in' : 'Create an account'}</Link>
       </p>
 
